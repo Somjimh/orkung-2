@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Movements - {{ app_name }}{% endblock %}
+{% block heading %}Movements{% endblock %}
+{% block content %}
+{% if current_user.role in ('admin','manager','worker') %}
+<div class="card section">
+  <h3>Move animals</h3>
+  <form method="post" action="{{ url_for('groups.move_animals') }}">
+    <div class="form-grid" style="margin-bottom:1rem;">
+      <div class="field"><label>Move date</label><input type="date" name="move_date"></div>
+      <div class="field"><label>To group</label><select name="to_group_id"><option value="">No change</option>{% for g in groups %}<option value="{{ g.id }}">{{ g.name }}</option>{% endfor %}</select></div>
+      <div class="field"><label>To site</label><select name="to_site_id"><option value="">No change</option>{% for s in sites %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}</select></div>
+      <div class="field" style="grid-column:1/-1;"><label>Notes</label><input type="text" name="notes"></div>
+    </div>
+    <label>Select animals to move</label>
+    <div class="table-wrap" style="max-height:340px; overflow-y:auto;">
+    <table class="data"><thead><tr><th></th><th>Tag</th><th>Name</th><th>Current group</th></tr></thead><tbody>
+    {% for a in animals %}
+    <tr><td data-label=""><input type="checkbox" name="animal_ids" value="{{ a.id }}"></td>
+      <td data-label="Tag">{{ a.tag_id }}</td><td data-label="Name">{{ a.name or '—' }}</td><td data-label="Current group">{{ a.group_name or '—' }}</td></tr>
+    {% endfor %}
+    </tbody></table>
+    </div>
+    <button class="btn" type="submit" style="margin-top:1rem;">Move selected animals</button>
+  </form>
+</div>
+{% endif %}
+
+<div class="card section">
+  <h3>Recent movement history</h3>
+  {% if events %}
+  <div class="table-wrap"><table class="data"><thead><tr><th>Date</th><th>Animal</th><th>From group</th><th>To group</th><th>From site</th><th>To site</th></tr></thead><tbody>
+  {% for e in events %}
+  <tr><td data-label="Date">{{ e.event_date }}</td><td data-label="Animal"><a href="{{ url_for('animals.profile', animal_id=e.animal_id) }}">{{ e.tag_id }}</a></td>
+    <td data-label="From group">{{ e.from_group_name or '—' }}</td><td data-label="To group">{{ e.to_group_name or '—' }}</td>
+    <td data-label="From site">{{ e.from_site_name or '—' }}</td><td data-label="To site">{{ e.to_site_name or '—' }}</td></tr>
+  {% endfor %}
+  </tbody></table></div>
+  {% else %}<p class="muted">No movements recorded yet.</p>{% endif %}
+</div>
+{% endblock %}

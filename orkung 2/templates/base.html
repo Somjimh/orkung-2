@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>{% block title %}{{ app_name }}{% endblock %}</title>
+<meta name="theme-color" content="#164a2b">
+<link rel="manifest" href="{{ url_for('manifest') }}">
+<link rel="icon" href="data:image/svg+xml,{{ '<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22><rect width=%2232%22 height=%2232%22 rx=%227%22 fill=%22%23164a2b%22/><text x=%2216%22 y=%2222%22 font-size=%2216%22 text-anchor=%22middle%22 fill=%22white%22 font-family=%22sans-serif%22>O</text></svg>' | safe }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+{% macro navlinks() %}
+  {% if 'dashboard' in nav %}<a href="{{ url_for('dashboard.index') }}" class="{{ 'active' if request.endpoint=='dashboard.index' }}"><span class="ic">&#9679;</span> Dashboard</a>{% endif %}
+  {% if 'animals' in nav %}<a href="{{ url_for('animals.list_view') }}" class="{{ 'active' if request.endpoint and request.endpoint.startswith('animals.') and request.endpoint!='animals.add' }}"><span class="ic">&#128366;</span> Animals</a>{% endif %}
+  {% if 'add_animal' in nav %}<a href="{{ url_for('animals.add') }}" class="{{ 'active' if request.endpoint=='animals.add' }}"><span class="ic">&#65291;</span> Add Animal</a>{% endif %}
+  {% if 'weights' in nav %}<a href="{{ url_for('weights.index') }}" class="{{ 'active' if request.endpoint and request.endpoint.startswith('weights.') }}"><span class="ic">&#9878;</span> Weight Records</a>{% endif %}
+  {% if 'breeding' in nav %}<a href="{{ url_for('breeding.index') }}" class="{{ 'active' if request.endpoint=='breeding.index' }}"><span class="ic">&#9829;</span> Breeding</a>{% endif %}
+  {% if 'births' in nav %}<a href="{{ url_for('breeding.births') }}" class="{{ 'active' if request.endpoint=='breeding.births' }}"><span class="ic">&#128119;</span> Births</a>{% endif %}
+  {% if 'health' in nav %}<a href="{{ url_for('health.index') }}" class="{{ 'active' if request.endpoint and request.endpoint.startswith('health.') }}"><span class="ic">&#10010;</span> Health &amp; Treatments</a>{% endif %}
+  {% if 'groups' in nav %}<a href="{{ url_for('groups.index') }}" class="{{ 'active' if request.endpoint=='groups.index' }}"><span class="ic">&#9635;</span> Groups</a>{% endif %}
+  {% if 'movements' in nav %}<a href="{{ url_for('groups.movements') }}" class="{{ 'active' if request.endpoint=='groups.movements' }}"><span class="ic">&#8646;</span> Movements</a>{% endif %}
+  {% if 'tasks' in nav %}<a href="{{ url_for('tasks.index') }}" class="{{ 'active' if request.endpoint and request.endpoint.startswith('tasks.') }}"><span class="ic">&#9745;</span> Tasks &amp; Alerts {% if pending_tasks %}<span class="pill amber" style="margin-left:auto">{{ pending_tasks }}</span>{% endif %}</a>{% endif %}
+  {% if 'reports' in nav %}<a href="{{ url_for('reports.index') }}" class="{{ 'active' if request.endpoint and request.endpoint.startswith('reports.') }}"><span class="ic">&#128202;</span> Reports</a>{% endif %}
+  {% if 'admin' in nav %}<a href="{{ url_for('admin.users') }}" class="{{ 'active' if request.endpoint and request.endpoint.startswith('admin.') }}"><span class="ic">&#9881;</span> Users &amp; Settings</a>{% endif %}
+{% endmacro %}
+
+{% if current_user %}
+<div class="app-shell">
+  <aside class="sidebar" id="desktopSidebar">
+    <div class="brand"><div class="mark">O</div><div><div class="name">Orkung</div><div class="tag">Livestock Manager</div></div></div>
+    <nav>{{ navlinks() }}</nav>
+    <div class="footer-user">
+      <div><strong>{{ current_user.full_name }}</strong></div>
+      <div class="muted">{{ role_labels[current_user.role] }}</div>
+      <form method="post" action="{{ url_for('auth.logout') }}"><button type="submit">Log out</button></form>
+    </div>
+  </aside>
+
+  <div class="drawer-overlay" id="drawerOverlay">
+    <aside class="sidebar">
+      <div class="brand"><div class="mark">O</div><div><div class="name">Orkung</div><div class="tag">Livestock Manager</div></div></div>
+      <nav>{{ navlinks() }}</nav>
+      <div class="footer-user">
+        <div><strong>{{ current_user.full_name }}</strong></div>
+        <div class="muted">{{ role_labels[current_user.role] }}</div>
+        <form method="post" action="{{ url_for('auth.logout') }}"><button type="submit">Log out</button></form>
+      </div>
+    </aside>
+  </div>
+
+  <div class="main">
+    <div class="mobile-topbar">
+      <div class="brand-m"><div class="mark" style="width:26px;height:26px;border-radius:7px;background:#b8763a;display:flex;align-items:center;justify-content:center;font-size:.85rem;">O</div> Orkung</div>
+      <button class="menu-btn" id="menuBtn" aria-label="Open menu">&#9776;</button>
+    </div>
+    <div class="offline-banner" id="offlineBanner">You're offline. New records will be saved on this device and kept until you're back online.</div>
+    <div class="topbar">
+      <h1>{% block heading %}{% endblock %}</h1>
+      <div class="btn-row no-print">{% block topbar_actions %}{% endblock %}</div>
+    </div>
+    <div class="content">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          {% for category, message in messages %}
+            <div class="flash {{ category }}">{{ message }}</div>
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
+      {% block content %}{% endblock %}
+    </div>
+  </div>
+</div>
+{% else %}
+  {% block guest_content %}{% endblock %}
+{% endif %}
+
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

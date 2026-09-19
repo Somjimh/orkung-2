@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Import Preview - {{ app_name }}{% endblock %}
+{% block heading %}Import Preview{% endblock %}
+{% block content %}
+<div class="card section">
+  <p><strong>{{ valid_count }}</strong> of <strong>{{ total }}</strong> row(s) are valid and ready to import. Rows with errors will be skipped.</p>
+  <form method="post" action="{{ url_for('admin.import_commit') }}">
+    <input type="hidden" name="token" value="{{ token }}">
+    <button class="btn" type="submit" {{ 'disabled' if valid_count==0 }} data-confirm="Import {{ valid_count }} animal(s) now?">Commit import ({{ valid_count }} animal(s))</button>
+    <a class="btn secondary" href="{{ url_for('admin.import_form') }}">Cancel</a>
+  </form>
+</div>
+<div class="table-wrap">
+<table class="data">
+  <thead><tr><th>Line</th><th>Tag</th><th>Species</th><th>Sex</th><th>Status</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+  <tr>
+    <td data-label="Line">{{ r.line }}</td>
+    <td data-label="Tag">{{ r.data.tag_id }}</td>
+    <td data-label="Species">{{ r.data.species }}</td>
+    <td data-label="Sex">{{ r.data.sex }}</td>
+    <td data-label="Status">
+      {% if r.ok %}<span class="pill green">Ready</span>
+      {% else %}<span class="pill red">{{ r.errors|join(', ') }}</span>{% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

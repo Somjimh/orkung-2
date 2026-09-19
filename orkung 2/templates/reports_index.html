@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Reports - {{ app_name }}{% endblock %}
+{% block heading %}Reports{% endblock %}
+{% block content %}
+<div class="grid cols-3">
+  {% set reports = [
+    ('reports.inventory', 'Current livestock inventory', 'Snapshot totals by status and species.'),
+    ('reports.composition', 'Herd composition', 'Breakdown by species, breed, sex, group and site.'),
+    ('reports.export_animals', 'Animal register', 'Full exportable animal listing.'),
+    ('reports.weight_history', 'Weight history & growth', 'First vs. latest weight, total gain, ADG.'),
+    ('reports.breeding_performance', 'Breeding performance', 'Services, pregnancy results, outcomes.'),
+    ('reports.births_report', 'Births & offspring', 'Every recorded birth and its offspring.'),
+    ('reports.mortality', 'Mortality', 'Deceased animals and recorded notes.'),
+    ('reports.movements_report', 'Purchases, transfers & sales', 'Animals bought, sold, transferred or slaughtered.'),
+    ('reports.health_history', 'Health & treatment history', 'All recorded treatments and procedures.'),
+    ('reports.vaccinations', 'Vaccination records', 'All catalog vaccine administrations.'),
+    ('reports.withdrawal', 'Medicine withdrawal records', 'Meat/milk withdrawal windows by treatment.'),
+    ('reports.group_membership', 'Group membership', 'Historical and current group assignments.'),
+    ('reports.by_site', 'Animals by site', 'Every animal grouped by current site.'),
+    ('reports.incomplete', 'Incomplete records', 'Active animals missing key fields.'),
+  ] %}
+  {% for endpoint, title, desc in reports %}
+  <a class="card link" href="{{ url_for(endpoint) }}" style="display:block;">
+    <h3>{{ title }}</h3><p class="small muted" style="margin:0;">{{ desc }}</p>
+  </a>
+  {% endfor %}
+  {% if current_user.role in ('admin','viewer') %}
+  <a class="card link" href="{{ url_for('reports.audit_report') }}" style="display:block;">
+    <h3>User activity &amp; audit history</h3><p class="small muted" style="margin:0;">Every create, edit, status change and access-denied attempt.</p>
+  </a>
+  {% endif %}
+</div>
+{% endblock %}

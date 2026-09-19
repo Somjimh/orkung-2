@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Bulk weight entry - {{ app_name }}{% endblock %}
+{% block heading %}Bulk weight entry{% endblock %}
+{% block content %}
+<form method="get" class="toolbar card">
+  <div class="field"><label>Group</label>
+    <select name="group_id" onchange="this.form.submit()">
+      <option value="">Choose a group&hellip;</option>
+      {% for g in groups %}<option value="{{ g.id }}" {{ 'selected' if group_id==g.id }}>{{ g.name }}</option>{% endfor %}
+    </select>
+  </div>
+</form>
+
+{% if group_id %}
+<form method="post" class="card">
+  <input type="hidden" name="group_id" value="{{ group_id }}">
+  <div class="form-grid" style="margin-bottom:1rem;">
+    <div class="field"><label for="measured_on">Measurement date *</label><input type="date" id="measured_on" name="measured_on" value="{{ today }}" required></div>
+    <div class="field"><label for="method">Method / equipment</label><input type="text" id="method" name="method"></div>
+  </div>
+  {% if animals %}
+  <div class="table-wrap"><table class="data">
+    <thead><tr><th>Tag</th><th>Name</th><th>Last weight</th><th>New weight (kg)</th></tr></thead>
+    <tbody>
+    {% for a in animals %}
+    <tr>
+      <td data-label="Tag">{{ a.tag_id }}</td>
+      <td data-label="Name">{{ a.name or '—' }}</td>
+      <td data-label="Last weight">{{ a.last_weight or '—' }} {% if a.last_date %}<span class="small muted">({{ a.last_date }})</span>{% endif %}</td>
+      <td data-label="New weight"><input type="number" step="0.01" name="weight_{{ a.id }}" placeholder="kg"></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  <div class="checkbox-row" style="margin:1rem 0;">
+    <input type="checkbox" id="confirm_all_unusual" name="confirm_all_unusual">
+    <label for="confirm_all_unusual" style="margin:0;">Confirm any unusually large changes in this batch are correct</label>
+  </div>
+  <button type="submit" name="submit_bulk" value="1" class="btn">Save all weights</button>
+  {% else %}
+  <p class="muted">No active animals in this group.</p>
+  {% endif %}
+</form>
+{% endif %}
+{% endblock %}

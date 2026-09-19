@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Groups - {{ app_name }}{% endblock %}
+{% block heading %}Groups &amp; Sites{% endblock %}
+{% block content %}
+{% if current_user.role in ('admin','manager') %}
+<div class="grid cols-2 section">
+  <div class="card">
+    <h3>New group</h3>
+    <form method="post" action="{{ url_for('groups.add_group') }}" class="form-grid">
+      <div class="field"><label>Name *</label><input type="text" name="name" required></div>
+      <div class="field"><label>Site</label><select name="site_id"><option value="">Unassigned</option>{% for s in sites %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}</select></div>
+      <div class="field" style="grid-column:1/-1;"><label>Description</label><input type="text" name="description"></div>
+      <div><button class="btn small" type="submit">Add group</button></div>
+    </form>
+  </div>
+  <div class="card">
+    <h3>New site / location</h3>
+    <form method="post" action="{{ url_for('groups.add_site') }}" class="form-grid">
+      <div class="field"><label>Name *</label><input type="text" name="name" required></div>
+      <div class="field" style="grid-column:1/-1;"><label>Description</label><input type="text" name="description"></div>
+      <div><button class="btn small" type="submit">Add site</button></div>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+<div class="card section">
+  <h3>Groups</h3>
+  <div class="table-wrap"><table class="data"><thead><tr><th>Name</th><th>Site</th><th>Active animals</th><th>Status</th></tr></thead><tbody>
+  {% for g in groups %}
+  <tr><td data-label="Name"><a href="{{ url_for('groups.detail', group_id=g.id) }}">{{ g.name }}</a></td>
+    <td data-label="Site">{{ g.site_name or '—' }}</td><td data-label="Active animals">{{ g.animal_count }}</td>
+    <td data-label="Status">{{ 'Active' if g.active else 'Inactive' }}</td></tr>
+  {% endfor %}
+  </tbody></table></div>
+</div>
+
+<div class="card section">
+  <h3>Sites</h3>
+  <div class="table-wrap"><table class="data"><thead><tr><th>Name</th><th>Description</th><th>Active animals</th></tr></thead><tbody>
+  {% for s in sites %}<tr><td data-label="Name">{{ s.name }}</td><td data-label="Description">{{ s.description or '—' }}</td><td data-label="Active animals">{{ s.animal_count }}</td></tr>{% endfor %}
+  </tbody></table></div>
+</div>
+{% endblock %}

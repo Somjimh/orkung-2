@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}Breeding - {{ app_name }}{% endblock %}
+{% block heading %}Breeding &amp; Reproduction{% endblock %}
+{% block content %}
+
+{% if current_user.role in ('admin','manager','worker') %}
+<div class="card section">
+  <h3>Record a service / mating</h3>
+  <form method="post" action="{{ url_for('breeding.add') }}" class="form-grid" data-draft-key="breeding-new">
+    <div class="field"><label>Dam *</label>
+      <select name="dam_id" required><option value="">Select&hellip;</option>
+      {% for f in females %}<option value="{{ f.id }}">{{ f.tag_id }}{% if f.name %} ({{ f.name }}){% endif %}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="field"><label>Method</label>
+      <select name="method"><option value="natural">Natural mating</option><option value="ai">Artificial insemination</option></select>
+    </div>
+    <div class="field"><label>Sire (on-farm)</label>
+      <select name="sire_id"><option value="">Not on farm / unknown</option>
+      {% for m in males %}<option value="{{ m.id }}">{{ m.tag_id }}{% if m.name %} ({{ m.name }}){% endif %}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="field"><label>Sire (if not on farm)</label><input type="text" name="sire_freeform" placeholder="e.g. neighbour's buck"></div>
+    <div class="field"><label>Heat observed date</label><input type="date" name="heat_observed_date"></div>
+    <div class="field"><label>Service date *</label><input type="date" name="service_date" required></div>
+    <div class="field" style="grid-column:1/-1;"><label>Notes</label><input type="text" name="notes"></div>
+    <div><button class="btn" type="submit">Save breeding record</button></div>
+  </form>
+</div>
+{% endif %}
+
+<div class="toolbar" style="margin-bottom:.6rem;">
+  <div class="field">
+    <label>Status</label>
+    <form method="get"><select name="status" onchange="this.form.submit()">
+      <option value="active" {{ 'selected' if status=='active' }}>Active</option>
+      <option value="all" {{ 'selected' if status=='all' }}>All</option>
+      <option value="completed" {{ 'selected' if status=='completed' }}>Completed</option>
+      <option value="lost" {{ 'selected' if status=='lost' }}>Lost</option>
+      <option value="not_pregnant" {{ 'selected' if status=='not_pregnant' }}>Not pregnant</option>
+    </select></form>
+  </div>
+</div>
+
+<div class="table-wrap">
+<table class="data">
+  <thead><tr><th>Dam</th><th>Method</th><th>Sire</th><th>Service date</th><th>Pregnancy check</th><th>Expected birth</th><th>Status</th>{% if current_user.role in ('admin','manager','worker') %}<th>Actions</th>{% endif %}</tr></thead>
+  <tbody>
+  {% for b in rows %}
+  <tr>
+    <td data-label="Dam">{{ b.dam_tag }}{% if b.dam_name %} ({{ b.dam_name }}){% endif %}</td>
+    <td data-label="Method">{{ b.method|upper }}</td>
+    <td data-label="Sire">{{ b.sire_tag or b.sire_freeform or '—' }}</td>
+    <td data-label="Service date">{{ b.service_date }}</td>
+    <td data-label="Pregnancy check">
+      {% if b.pregnancy_result == 'pregnant' %}<span class="pill green">Pregnant</span>
+      {% elif b.pregnancy_result == 'not_pregnant' %}<span class="pill gray">Not pregnant</span>
+      {% else %}<span class="pill amber">Pending</span>{% endif %}
+    </td>
+    <td data-label="Expected birth">{{ b.expected_birth_date or '—' }}</td>
+    <td data-label="Status"><span class="pill {{ 'green' if b.status=='active' else 'gray' }}">{{ b.status }}</span></td>
+    {% if current_user.role in ('admin','manager','worker') %}
+    <td data-label="Actions">
+      {% if b.status == 'active' %}
+      <button class="btn small subtle" type="button" onclick="document.getElementById('check-{{ b.id }}').classList.toggle('open')">Pregnancy check</button>
+      <div class="modal-bg" id="check-{{ b.id }}">
+        <div class="modal">
+          <h3>Pregnancy check &ndash; {{ b.dam_tag }}</h3>
+          <form method="post" action="{{ url_for('breeding.pregnancy_check', breeding_id=b.id) }}">
+            <div class="field"><label>Check date</label><input type="date" name="pregnancy_check_date"></div>
+            <div class="field"><label>Result</label>
+              <select name="pregnancy_result"><option value="pregnant">Pregnant</option><option value="not_pregnant">Not pregnant</option></select>
+            </div>
+            <div class="field"><label>Expected birth date</label><input type="date" name="expected_birth_date"></div>
+            <div class="btn-row"><button class="btn small" type="submit">Save</button>
+              <button class="btn small secondary" type="button" onclick="document.getElementById('check-{{ b.id }}').classList.remove('open')">Cancel</button></div>
+          </form>
+          <hr class="divider">
+          <form method="post" action="{{ url_for('breeding.record_loss', breeding_id=b.id) }}">
+            <div class="field"><label>Record pregnancy loss / abortion</label><input type="date" name="loss_date"></div>
+            <div class="field"><input type="text" name="loss_notes" placeholder="Notes"></div>
+            <button class="btn small danger" type="submit" data-confirm="Record this as a pregnancy loss?">Record loss</button>
+          </form>
+        </div>
+      </div>
+      {% endif %}
+    </td>
+    {% endif %}
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% if not rows %}<div class="empty-state"><p>No breeding records match this filter.</p></div>{% endif %}
+{% endblock %}

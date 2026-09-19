@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Sign in - {{ app_name }}{% endblock %}
+{% block guest_content %}
+<div style="min-height:100vh; display:flex; align-items:center; justify-content:center; background:linear-gradient(160deg,var(--green-900),var(--green-700)); padding:1rem;">
+  <div class="card" style="max-width:400px; width:100%; padding:2rem;">
+    <div style="display:flex; align-items:center; gap:.7rem; margin-bottom:1.4rem;">
+      <div style="width:44px;height:44px;border-radius:11px;background:var(--earth-500);display:flex;align-items:center;justify-content:center;font-weight:800;color:#fff;font-size:1.3rem;">O</div>
+      <div>
+        <div style="font-weight:800; font-size:1.15rem; color:var(--green-900);">Orkung Livestock Manager</div>
+        <div class="muted small">Sign in to continue</div>
+      </div>
+    </div>
+    {% if error %}<div class="flash error">{{ error }}</div>{% endif %}
+    <form method="post">
+      <div class="field">
+        <label for="username">Username</label>
+        <input type="text" id="username" name="username" required autofocus autocomplete="username">
+      </div>
+      <div class="field">
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" required autocomplete="current-password">
+      </div>
+      <button type="submit" class="btn" style="width:100%;">Sign in</button>
+    </form>
+    <hr class="divider">
+    <p class="small muted">Demo accounts (change these before real use): <br>
+      admin / Admin#2026 &middot; manager / Manager#2026 &middot; worker / Worker#2026 &middot; viewer / Viewer#2026 &middot; vet / Vet#2026</p>
+  </div>
+</div>
+{% endblock %}

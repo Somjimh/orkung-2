@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Settings - {{ app_name }}{% endblock %}
+{% block heading %}Species &amp; Breeds{% endblock %}
+{% block content %}
+<div class="tabs">
+  <a href="{{ url_for('admin.users') }}">Users</a>
+  <a href="{{ url_for('admin.settings') }}" class="active">Species &amp; breeds</a>
+  <a href="{{ url_for('admin.import_form') }}">Import animals</a>
+  <a href="{{ url_for('admin.backup') }}">Backup</a>
+  <a href="{{ url_for('reports.audit_report') }}">Audit history</a>
+</div>
+
+<div class="card section">
+  <h3>Species</h3>
+  <p class="small muted">Orkung is built for goats and sheep. Enable cattle or other species here if your farm needs them.</p>
+  <div class="table-wrap"><table class="data"><thead><tr><th>Species</th><th>Status</th><th>Action</th></tr></thead><tbody>
+  {% for s in species %}
+  <tr><td data-label="Species">{{ s.name }}</td>
+    <td data-label="Status">{% if s.enabled %}<span class="pill green">Enabled</span>{% else %}<span class="pill gray">Disabled</span>{% endif %}</td>
+    <td data-label="Action"><form method="post" action="{{ url_for('admin.toggle_species', species_id=s.id) }}">
+      <button class="btn small subtle" type="submit">{{ 'Disable' if s.enabled else 'Enable' }}</button></form></td>
+  </tr>
+  {% endfor %}
+  </tbody></table></div>
+</div>
+
+<div class="card section">
+  <h3>Breeds</h3>
+  <form method="post" action="{{ url_for('admin.add_breed') }}" class="form-grid" style="margin-bottom:1rem;">
+    <div class="field"><label>Species</label><select name="species_id">{% for s in species %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}</select></div>
+    <div class="field"><label>Breed name</label><input type="text" name="name" required></div>
+    <div><button class="btn small" type="submit">Add breed</button></div>
+  </form>
+  <table class="data"><thead><tr><th>Species</th><th>Breed</th></tr></thead><tbody>
+  {% for b in breeds %}<tr><td data-label="Species">{{ b.species_name }}</td><td data-label="Breed">{{ b.name }}</td></tr>{% endfor %}
+  </tbody></table>
+</div>
+{% endblock %}

@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Weight Records - {{ app_name }}{% endblock %}
+{% block heading %}Weight Records{% endblock %}
+{% block topbar_actions %}
+{% if current_user.role in ('admin','manager','worker') %}
+<a class="btn" href="{{ url_for('weights.bulk') }}">Bulk entry</a>
+{% endif %}
+<a class="btn secondary" href="{{ url_for('weights.export_csv', group_id=f_group_id) }}">Export CSV</a>
+{% endblock %}
+{% block content %}
+
+{% if stale %}
+<div class="card section">
+  <h3>Not weighed within the configured period</h3>
+  <div class="grid cols-4">
+    {% for s in stale %}
+    <a class="stat-card amber link" href="{{ url_for('animals.profile', animal_id=s.id, tab='weights') }}">
+      <div class="stat-label">{{ s.tag_id }}</div>
+      <div class="stat-sub">{{ 'never weighed' if not s.last_weighed else 'last: ' ~ s.last_weighed }}</div>
+    </a>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<form class="toolbar card" method="get">
+  <div class="field"><label>Group</label>
+    <select name="group_id"><option value="">All</option>{% for g in groups %}<option value="{{ g.id }}" {{ 'selected' if f_group_id==g.id }}>{{ g.name }}</option>{% endfor %}</select>
+  </div>
+  <div class="field"><label>Species</label>
+    <select name="species_id"><option value="">All</option>{% for s in species_list %}<option value="{{ s.id }}" {{ 'selected' if f_species_id==s.id }}>{{ s.name }}</option>{% endfor %}</select>
+  </div>
+  <div class="field"><label>From</label><input type="date" name="date_from" value="{{ f_date_from or '' }}"></div>
+  <div class="field"><label>To</label><input type="date" name="date_to" value="{{ f_date_to or '' }}"></div>
+  <button class="btn secondary small" type="submit">Filter</button>
+</form>
+
+<div class="table-wrap">
+<table class="data">
+  <thead><tr><th>Date</th><th>Record #</th><th>Tag</th><th>Species</th><th>Weight (kg)</th><th>BCS</th><th>Method</th><th>Recorded by</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+  <tr>
+    <td data-label="Date">{{ r.measured_on }}</td>
+    <td data-label="Record #"><a href="{{ url_for('animals.profile', animal_id=r.animal_id, tab='weights') }}">{{ r.record_no }}</a></td>
+    <td data-label="Tag">{{ r.tag_id }}</td>
+    <td data-label="Species">{{ r.species_name }}</td>
+    <td data-label="Weight (kg)">{{ r.weight_kg }}{% if r.flagged_outlier %} <span class="pill amber">confirmed unusual</span>{% endif %}</td>
+    <td data-label="BCS">{{ r.body_condition_score or '—' }}</td>
+    <td data-label="Method">{{ r.method or '—' }}</td>
+    <td data-label="Recorded by">{{ r.recorder or '—' }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% if not rows %}<div class="empty-state"><p>No weight records match these filters.</p></div>{% endif %}
+{% endblock %}

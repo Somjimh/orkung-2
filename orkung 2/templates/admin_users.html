@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Users &amp; Settings - {{ app_name }}{% endblock %}
+{% block heading %}Users &amp; Settings{% endblock %}
+{% block content %}
+<div class="tabs">
+  <a href="{{ url_for('admin.users') }}" class="active">Users</a>
+  <a href="{{ url_for('admin.settings') }}">Species &amp; breeds</a>
+  <a href="{{ url_for('admin.import_form') }}">Import animals</a>
+  <a href="{{ url_for('admin.backup') }}">Backup</a>
+  <a href="{{ url_for('reports.audit_report') }}">Audit history</a>
+</div>
+
+<div class="card section">
+  <h3>Add a user</h3>
+  <form method="post" action="{{ url_for('admin.add_user') }}" class="form-grid">
+    <div class="field"><label>Username *</label><input type="text" name="username" required></div>
+    <div class="field"><label>Full name *</label><input type="text" name="full_name" required></div>
+    <div class="field"><label>Email</label><input type="email" name="email"></div>
+    <div class="field"><label>Password *</label><input type="password" name="password" required minlength="6"></div>
+    <div class="field"><label>Role *</label>
+      <select name="role" required>{% for r in role_choices %}<option value="{{ r }}">{{ role_labels[r] }}</option>{% endfor %}</select>
+    </div>
+    <div><button class="btn" type="submit">Add user</button></div>
+  </form>
+</div>
+
+<div class="card section">
+  <h3>All users</h3>
+  <div class="table-wrap"><table class="data"><thead><tr><th>Name</th><th>Username</th><th>Role</th><th>Status</th><th>Last login</th><th>Actions</th></tr></thead><tbody>
+  {% for u in users %}
+  <tr>
+    <td data-label="Name">{{ u.full_name }}</td>
+    <td data-label="Username">{{ u.username }}</td>
+    <td data-label="Role">{{ role_labels[u.role] }}</td>
+    <td data-label="Status">{% if u.active %}<span class="pill green">Active</span>{% else %}<span class="pill gray">Inactive</span>{% endif %}</td>
+    <td data-label="Last login">{{ u.last_login|fmtdate if u.last_login else '—' }}</td>
+    <td data-label="Actions">
+      <form method="post" action="{{ url_for('admin.toggle_user', user_id=u.id) }}" style="display:inline;">
+        <button class="btn small subtle" type="submit" {{ 'disabled' if u.id==current_user.id }}>{{ 'Deactivate' if u.active else 'Reactivate' }}</button>
+      </form>
+      <button class="btn small secondary" type="button" onclick="document.getElementById('pw-{{ u.id }}').classList.toggle('open')">Reset password</button>
+      <div class="modal-bg" id="pw-{{ u.id }}"><div class="modal">
+        <h3>Reset password for {{ u.username }}</h3>
+        <form method="post" action="{{ url_for('admin.reset_password', user_id=u.id) }}">
+          <div class="field"><label>New password</label><input type="password" name="new_password" minlength="6" required></div>
+          <div class="btn-row"><button class="btn small" type="submit">Save</button>
+            <button class="btn small secondary" type="button" onclick="document.getElementById('pw-{{ u.id }}').classList.remove('open')">Cancel</button></div>
+        </form>
+      </div></div>
+    </td>
+  </tr>
+  {% endfor %}
+  </tbody></table></div>
+</div>
+{% endblock %}

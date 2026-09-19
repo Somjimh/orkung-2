@@ -1,0 +1,243 @@
+{% extends "base.html" %}
+{% block title %}{{ a.tag_id }} - {{ app_name }}{% endblock %}
+{% block heading %}{{ a.tag_id }}{% if a.name %} &ndash; {{ a.name }}{% endif %}{% endblock %}
+{% block topbar_actions %}
+{% if current_user.role in ('admin','manager','worker') %}
+<a class="btn secondary" href="{{ url_for('animals.edit', animal_id=a.id) }}">Edit</a>
+{% endif %}
+<a class="btn subtle" href="{{ url_for('animals.export_history_csv', animal_id=a.id) }}">Download history (CSV)</a>
+{% endblock %}
+{% block content %}
+
+<div class="grid" style="grid-template-columns: 220px 1fr; gap:1.4rem;">
+  <div>
+    {% if a.photo_path %}
+      <img class="avatar-photo" src="{{ url_for('uploaded_file', filename=a.photo_path) }}" alt="Photo of {{ a.tag_id }}">
+    {% else %}
+      <div class="avatar-photo placeholder">&#128366;</div>
+    {% endif %}
+    <div class="card" style="margin-top:.8rem;">
+      <div class="small muted">Record #</div><div style="font-weight:800;">{{ a.record_no }}</div>
+      <div class="small muted" style="margin-top:.5rem;">Status</div>
+      <div>
+        {% if a.status == 'active' %}<span class="pill green">Active</span>
+        {% elif a.status == 'missing' %}<span class="pill red">Missing</span>
+        {% else %}<span class="pill gray">{{ a.status|capitalize }}</span>{% endif %}
+      </div>
+      <div class="small muted" style="margin-top:.5rem;">Age / Weight</div>
+      <div>{{ a.dob|age(a.dob_estimated) }} &middot; {{ weights[-1].row.weight_kg if weights else '—' }}{% if weights %} kg{% endif %}</div>
+      <div class="small muted" style="margin-top:.5rem;">Group / Site</div>
+      <div>{{ a.group_name or '—' }} / {{ a.site_name or '—' }}</div>
+    </div>
+  </div>
+
+  <div>
+    <div class="tabs">
+      <a href="?tab=overview" class="{{ 'active' if tab=='overview' }}">Overview</a>
+      <a href="?tab=weights" class="{{ 'active' if tab=='weights' }}">Weights</a>
+      <a href="?tab=breeding" class="{{ 'active' if tab=='breeding' }}">Breeding &amp; Births</a>
+      <a href="?tab=health" class="{{ 'active' if tab=='health' }}">Health</a>
+      <a href="?tab=movements" class="{{ 'active' if tab=='movements' }}">Movements</a>
+      <a href="?tab=timeline" class="{{ 'active' if tab=='timeline' }}">Timeline</a>
+      <a href="?tab=documents" class="{{ 'active' if tab=='documents' }}">Documents</a>
+      {% if current_user.role in ('admin','viewer') %}<a href="?tab=audit" class="{{ 'active' if tab=='audit' }}">Audit history</a>{% endif %}
+    </div>
+
+    {% if tab == 'overview' %}
+      <div class="card section">
+        <h3>Identification</h3>
+        <div class="grid cols-2">
+          <p><strong>Species / Breed:</strong> {{ a.species_name }} / {{ a.breed_name or '—' }}</p>
+          <p><strong>Sex:</strong> {{ a.sex|capitalize }}</p>
+          <p><strong>Electronic ID:</strong> {{ a.eid or '—' }}</p>
+          <p><strong>Birth type:</strong> {{ a.birth_type or '—' }}</p>
+          <p><strong>Birth weight:</strong> {{ a.birth_weight or '—' }}{% if a.birth_weight %} kg{% endif %}</p>
+          <p><strong>Colour / marks:</strong> {{ a.color_markings or '—' }}</p>
+          <p><strong>Source:</strong> {{ a.source.replace('_',' ')|capitalize }} {% if a.supplier %}({{ a.supplier }}){% endif %}</p>
+          <p><strong>Acquisition date:</strong> {{ a.acquisition_date|fmtdate }}</p>
+          <p><strong>Reproductive status:</strong> {{ a.reproductive_status.replace('_',' ')|capitalize }}</p>
+        </div>
+        {% if a.notes %}<hr class="divider"><p><strong>Notes:</strong> {{ a.notes }}</p>{% endif %}
+        <p class="small muted">Created {{ a.created_at|fmtdate }} &middot; Last edited {{ a.updated_at|fmtdate }}</p>
+      </div>
+
+      <div class="card section">
+        <h3>Parentage &amp; offspring</h3>
+        <div class="grid cols-2">
+          <p><strong>Sire:</strong> {% if sire %}<a href="{{ url_for('animals.profile', animal_id=sire.id) }}">{{ sire.tag_id }}</a>{% else %}Unknown{% endif %}</p>
+          <p><strong>Dam:</strong> {% if dam %}<a href="{{ url_for('animals.profile', animal_id=dam.id) }}">{{ dam.tag_id }}</a>{% else %}Unknown{% endif %}</p>
+        </div>
+        {% if offspring %}
+        <div class="table-wrap"><table class="data"><thead><tr><th>Tag</th><th>Name</th><th>DOB</th><th>Sex</th></tr></thead><tbody>
+          {% for o in offspring %}<tr><td data-label="Tag"><a href="{{ url_for('animals.profile', animal_id=o.id) }}">{{ o.tag_id }}</a></td><td data-label="Name">{{ o.name or '—' }}</td><td data-label="DOB">{{ o.dob|fmtdate }}</td><td data-label="Sex">{{ o.sex|capitalize }}</td></tr>{% endfor %}
+        </tbody></table></div>
+        {% else %}<p class="muted">No offspring recorded.</p>{% endif %}
+      </div>
+
+      {% if current_user.role in ('admin','manager') %}
+      <div class="card section">
+        <h3>Change status</h3>
+        <form method="post" action="{{ url_for('animals.change_status', animal_id=a.id) }}" class="form-grid">
+          <div class="field">
+            <label>New status</label>
+            <select name="status">
+              {% for v,l in [('active','Active'),('sold','Sold'),('transferred','Transferred'),('slaughtered','Slaughtered'),('missing','Missing'),('deceased','Deceased')] %}
+              <option value="{{ v }}" {{ 'selected' if a.status==v }}>{{ l }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="field"><label>Date</label><input type="date" name="event_date" value="{{ a.status_date or '' }}"></div>
+          <div class="field" style="grid-column:1/-1;"><label>Notes</label><input type="text" name="notes" value=""></div>
+          <div><button class="btn secondary" type="submit" data-confirm="Change this animal's status? Its full history will be preserved.">Update status</button></div>
+        </form>
+        <hr class="divider">
+        <form method="post" action="{{ url_for('animals.tag_replace', animal_id=a.id) }}" class="form-grid">
+          <div class="field"><label>Replace ID tag</label><input type="text" name="new_tag" placeholder="New tag number"></div>
+          <div><button class="btn subtle" type="submit">Record tag replacement</button></div>
+        </form>
+      </div>
+      {% endif %}
+
+    {% elif tab == 'weights' %}
+      <div class="card section">
+        <h3>Weight trend</h3>
+        {{ weight_chart|safe }}
+      </div>
+      <div class="card section">
+        <div class="btn-row" style="margin-bottom:.8rem;"><a class="btn small" href="{{ url_for('weights.add_individual', animal_id=a.id) }}">+ Record weight</a></div>
+        {% if weights %}
+        <div class="table-wrap"><table class="data"><thead><tr><th>Date</th><th>Weight (kg)</th><th>Change</th><th>ADG (kg/day)</th><th>BCS</th><th>Method</th><th>Recorded by</th></tr></thead><tbody>
+        {% for w in weights|reverse %}
+        <tr>
+          <td data-label="Date">{{ w.row.measured_on }}</td>
+          <td data-label="Weight (kg)">{{ w.row.weight_kg }}{% if w.row.flagged_outlier %} <span class="pill amber">confirmed unusual</span>{% endif %}</td>
+          <td data-label="Change">{{ '%+0.2f'|format(w.change) if w.change is not none else '—' }}</td>
+          <td data-label="ADG">{{ '%+0.3f'|format(w.adg) if w.adg is not none else '—' }}</td>
+          <td data-label="BCS">{{ w.row.body_condition_score or '—' }}</td>
+          <td data-label="Method">{{ w.row.method or '—' }}</td>
+          <td data-label="Recorded by">{{ w.row.recorder_name or '—' }}</td>
+        </tr>
+        {% endfor %}
+        </tbody></table></div>
+        {% else %}<p class="muted">No weight records yet.</p>{% endif %}
+      </div>
+
+    {% elif tab == 'breeding' %}
+      <div class="card section">
+        <h3>Breeding history</h3>
+        {% if breeding %}
+        <div class="table-wrap"><table class="data"><thead><tr><th>Service date</th><th>Method</th><th>Sire</th><th>Pregnancy check</th><th>Expected birth</th><th>Status</th></tr></thead><tbody>
+        {% for b in breeding %}
+        <tr><td data-label="Service date">{{ b.service_date|fmtdate }}</td><td data-label="Method">{{ b.method|upper }}</td>
+          <td data-label="Sire">{{ b.sire_freeform or (b.sire_id and 'On-farm #' ~ b.sire_id) or '—' }}</td>
+          <td data-label="Pregnancy check">{{ b.pregnancy_result or 'pending' }}</td>
+          <td data-label="Expected birth">{{ b.expected_birth_date|fmtdate }}</td>
+          <td data-label="Status"><span class="pill {{ 'green' if b.status=='active' else 'gray' }}">{{ b.status }}</span></td></tr>
+        {% endfor %}</tbody></table></div>
+        {% else %}<p class="muted">No breeding records.</p>{% endif %}
+      </div>
+      <div class="card section">
+        <h3>Birth history</h3>
+        {% if births %}
+        <div class="table-wrap"><table class="data"><thead><tr><th>Birth date</th><th>Born alive</th><th>Stillborn</th><th>Weaning date</th></tr></thead><tbody>
+        {% for b in births %}
+        <tr><td data-label="Birth date">{{ b.birth_date }}</td><td data-label="Born alive">{{ b.born_alive }}</td><td data-label="Stillborn">{{ b.stillborn }}</td><td data-label="Weaning date">{{ b.weaning_date|fmtdate }}</td></tr>
+        {% endfor %}</tbody></table></div>
+        {% else %}<p class="muted">No births recorded.</p>{% endif %}
+      </div>
+
+    {% elif tab == 'health' %}
+      <div class="card section">
+        <h3>Health observations</h3>
+        {% if health_obs %}
+        <div class="table-wrap"><table class="data"><thead><tr><th>Date</th><th>Symptoms</th><th>Diagnosis</th></tr></thead><tbody>
+        {% for h in health_obs %}<tr><td data-label="Date">{{ h.observation_date }}</td><td data-label="Symptoms">{{ h.symptoms or '—' }}</td><td data-label="Diagnosis">{{ h.confirmed_diagnosis or h.provisional_diagnosis or '—' }}</td></tr>{% endfor %}
+        </tbody></table></div>
+        {% else %}<p class="muted">No observations recorded.</p>{% endif %}
+      </div>
+      <div class="card section">
+        <h3>Treatments &amp; vaccinations</h3>
+        {% if treatments %}
+        <div class="table-wrap"><table class="data"><thead><tr><th>Start</th><th>Type</th><th>Medicine</th><th>Withdrawal (meat/milk)</th><th>Follow-up</th><th>Result</th></tr></thead><tbody>
+        {% for t in treatments %}
+        <tr><td data-label="Start">{{ t.start_date }}</td><td data-label="Type">{{ t.treatment_type or '—' }}</td>
+          <td data-label="Medicine">{{ t.medicine_catalog_name or t.medicine_name or '—' }}</td>
+          <td data-label="Withdrawal">
+            {% if t.meat_withdrawal_end and t.meat_withdrawal_end >= today_str %}<span class="pill red">meat until {{ t.meat_withdrawal_end }}</span>{% endif %}
+            {% if t.milk_withdrawal_end and t.milk_withdrawal_end >= today_str %}<span class="pill red">milk until {{ t.milk_withdrawal_end }}</span>{% endif %}
+            {% if not t.meat_withdrawal_end and not t.milk_withdrawal_end %}—{% endif %}
+          </td>
+          <td data-label="Follow-up">{{ t.follow_up_date|fmtdate }}</td>
+          <td data-label="Result">{{ t.result or '—' }}</td></tr>
+        {% endfor %}</tbody></table></div>
+        {% else %}<p class="muted">No treatments recorded.</p>{% endif %}
+      </div>
+
+    {% elif tab == 'movements' %}
+      <div class="card section">
+        <h3>Group history</h3>
+        {% if group_history %}
+        <div class="table-wrap"><table class="data"><thead><tr><th>Group</th><th>From</th><th>To</th></tr></thead><tbody>
+        {% for gm in group_history %}<tr><td data-label="Group">{{ gm.group_name }}</td><td data-label="From">{{ gm.start_date }}</td><td data-label="To">{{ gm.end_date or 'current' }}</td></tr>{% endfor %}
+        </tbody></table></div>
+        {% else %}<p class="muted">No group history.</p>{% endif %}
+      </div>
+      <div class="card section">
+        <h3>Movement &amp; life events</h3>
+        {% if events %}
+        <div class="table-wrap"><table class="data"><thead><tr><th>Date</th><th>Event</th><th>Notes</th></tr></thead><tbody>
+        {% for e in events %}<tr><td data-label="Date">{{ e.event_date }}</td><td data-label="Event">{{ e.event_type.replace('_',' ')|title }}</td><td data-label="Notes">{{ e.notes or e.new_tag or '—' }}</td></tr>{% endfor %}
+        </tbody></table></div>
+        {% else %}<p class="muted">No events recorded.</p>{% endif %}
+      </div>
+
+    {% elif tab == 'timeline' %}
+      <div class="card section">
+        <h3>Chronological timeline</h3>
+        <ul class="timeline">
+        {% for item in timeline %}
+          <li><div class="t-date">{{ item.date|fmtdate }}</div><div class="t-title">{{ item.title }}</div></li>
+        {% endfor %}
+        </ul>
+      </div>
+      <div class="card section">
+        <h3>Comments &amp; observations</h3>
+        <form method="post" action="{{ url_for('animals.add_comment', animal_id=a.id) }}" class="field">
+          <textarea name="body" placeholder="Add a comment or observation&hellip;" required></textarea>
+          <button class="btn small" type="submit" style="margin-top:.5rem;">Add comment</button>
+        </form>
+        {% for c in comments %}
+        <div style="padding:.6rem 0; border-top:1px solid var(--line);">
+          <div class="small muted">{{ c.full_name }} &middot; {{ c.created_at|fmtdate }}</div>
+          <div>{{ c.body }}</div>
+        </div>
+        {% endfor %}
+      </div>
+
+    {% elif tab == 'documents' %}
+      <div class="card section">
+        <h3>Attached documents &amp; photographs</h3>
+        <form method="post" action="{{ url_for('animals.add_attachment', animal_id=a.id) }}" enctype="multipart/form-data" class="form-grid">
+          <div class="field"><label>File</label><input type="file" name="file" required></div>
+          <div class="field"><label>Notes</label><input type="text" name="notes"></div>
+          <div><button class="btn small" type="submit">Upload</button></div>
+        </form>
+        {% if attachments %}
+        <table class="data"><thead><tr><th>File</th><th>Notes</th><th>Uploaded</th></tr></thead><tbody>
+        {% for att in attachments %}<tr><td data-label="File"><a href="{{ url_for('uploaded_file', filename=att.stored_path) }}" target="_blank">{{ att.filename }}</a></td><td data-label="Notes">{{ att.notes or '' }}</td><td data-label="Uploaded">{{ att.uploaded_at|fmtdate }}</td></tr>{% endfor %}
+        </tbody></table>
+        {% else %}<p class="muted">No attachments yet.</p>{% endif %}
+      </div>
+
+    {% elif tab == 'audit' %}
+      <div class="card section">
+        <h3>Audit history</h3>
+        {% if audit_rows %}
+        <table class="data"><thead><tr><th>When</th><th>User</th><th>Action</th><th>Summary</th></tr></thead><tbody>
+        {% for r in audit_rows %}<tr><td data-label="When">{{ r.ts }}</td><td data-label="User">{{ r.username }}</td><td data-label="Action">{{ r.action }}</td><td data-label="Summary">{{ r.summary }}</td></tr>{% endfor %}
+        </tbody></table>
+        {% else %}<p class="muted">No audit entries yet.</p>{% endif %}
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

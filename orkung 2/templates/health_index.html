@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block title %}Health &amp; Treatments - {{ app_name }}{% endblock %}
+{% block heading %}Health &amp; Treatments{% endblock %}
+{% block content %}
+<div class="tabs">
+  <a href="?tab=observations" class="{{ 'active' if tab=='observations' }}">Observations</a>
+  <a href="?tab=treatments" class="{{ 'active' if tab=='treatments' }}">Treatments &amp; Vaccinations</a>
+  <a href="?tab=withdrawal" class="{{ 'active' if tab=='withdrawal' }}">Withdrawal periods</a>
+  {% if current_user.role in ('admin','manager') %}<a href="?tab=medicines" class="{{ 'active' if tab=='medicines' }}">Medicine catalog</a>{% endif %}
+</div>
+
+{% if tab == 'observations' %}
+  {% if can_edit %}
+  <div class="card section">
+    <h3>Record an observation</h3>
+    <p class="small muted">This is a record-keeping entry. Orkung does not diagnose illness or prescribe medicine automatically.</p>
+    <form method="post" action="{{ url_for('health.add_observation') }}" class="form-grid" data-draft-key="obs-new">
+      <div class="field"><label>Animal *</label><select name="animal_id" required><option value="">Select&hellip;</option>{% for a in animals %}<option value="{{ a.id }}">{{ a.tag_id }}{% if a.name %} ({{ a.name }}){% endif %}</option>{% endfor %}</select></div>
+      <div class="field"><label>Observation date *</label><input type="date" name="observation_date" required></div>
+      <div class="field" style="grid-column:1/-1;"><label>Symptoms</label><textarea name="symptoms"></textarea></div>
+      <div class="field"><label>Provisional diagnosis</label><input type="text" name="provisional_diagnosis"></div>
+      <div class="field"><label>Confirmed diagnosis</label><input type="text" name="confirmed_diagnosis"></div>
+      <div class="field" style="grid-column:1/-1;"><label>Notes</label><textarea name="notes"></textarea></div>
+      <div><button class="btn" type="submit">Save observation</button></div>
+    </form>
+  </div>
+  {% endif %}
+  <div class="card section">
+    <div class="table-wrap"><table class="data"><thead><tr><th>Date</th><th>Animal</th><th>Symptoms</th><th>Diagnosis</th></tr></thead><tbody>
+    {% for o in observations %}<tr><td data-label="Date">{{ o.observation_date }}</td><td data-label="Animal"><a href="{{ url_for('animals.profile', animal_id=o.animal_id, tab='health') }}">{{ o.tag_id }}</a></td><td data-label="Symptoms">{{ o.symptoms or '—' }}</td><td data-label="Diagnosis">{{ o.confirmed_diagnosis or o.provisional_diagnosis or '—' }}</td></tr>{% endfor %}
+    </tbody></table></div>
+    {% if not observations %}<p class="muted">No observations recorded yet.</p>{% endif %}
+  </div>
+
+{% elif tab == 'treatments' %}
+  {% if can_edit %}
+  <div class="card section">
+    <h3>Record a treatment or vaccination</h3>
+    <form method="post" action="{{ url_for('health.add_treatment') }}" class="form-grid" data-draft-key="treatment-new">
+      <div class="field"><label>Animal *</label><select name="animal_id" required><option value="">Select&hellip;</option>{% for a in animals %}<option value="{{ a.id }}">{{ a.tag_id }}{% if a.name %} ({{ a.name }}){% endif %}</option>{% endfor %}</select></div>
+      <div class="field"><label>Treatment / procedure</label><input type="text" name="treatment_type" placeholder="e.g. deworming, wound care, vaccination"></div>
+      <div class="field"><label>Medicine / vaccine (catalog)</label>
+        <select name="medicine_id"><option value="">Not in catalog / other</option>{% for m in medicines %}<option value="{{ m.id }}">{{ m.name }} ({{ m.type }})</option>{% endfor %}</select>
+      </div>
+      <div class="field"><label>Medicine name (if not in catalog)</label><input type="text" name="medicine_name"></div>
+      <div class="field"><label>Dose</label><input type="text" name="dose"></div>
+      <div class="field"><label>Dose unit</label><input type="text" name="dose_unit" placeholder="ml, mg, cc&hellip;"></div>
+      <div class="field"><label>Route of administration</label><input type="text" name="route" placeholder="IM, SC, oral&hellip;"></div>
+      <div class="field"><label>Start date *</label><input type="date" name="start_date" required></div>
+      <div class="field"><label>End date</label><input type="date" name="end_date"></div>
+      <div class="field"><label>Administered by</label><input type="text" name="administered_by" value="{{ current_user.full_name }}"></div>
+      <div class="field"><label>Veterinarian (if applicable)</label><input type="text" name="veterinarian"></div>
+      <div class="field"><label>Meat withdrawal end date</label><input type="date" name="meat_withdrawal_end"></div>
+      <div class="field"><label>Milk withdrawal end date</label><input type="date" name="milk_withdrawal_end"></div>
+      <div class="field"><label>Follow-up date</label><input type="date" name="follow_up_date"></div>
+      <div class="field"><label>Result</label><input type="text" name="result"></div>
+      <div class="field" style="grid-column:1/-1;"><label>Notes / attachments</label><textarea name="notes"></textarea></div>
+      <div class="hint" style="grid-column:1/-1;">Leave withdrawal dates blank to auto-calculate from the selected catalog medicine's defaults and the start date.</div>
+      <div><button class="btn" type="submit">Save treatment</button></div>
+    </form>
+  </div>
+  {% endif %}
+  <div class="card section">
+    <div class="table-wrap"><table class="data"><thead><tr><th>Start</th><th>Animal</th><th>Type</th><th>Medicine</th><th>Withdrawal</th><th>Follow-up</th></tr></thead><tbody>
+    {% for t in treatments %}
+    <tr>
+      <td data-label="Start">{{ t.start_date }}</td>
+      <td data-label="Animal"><a href="{{ url_for('animals.profile', animal_id=t.animal_id, tab='health') }}">{{ t.tag_id }}</a></td>
+      <td data-label="Type">{{ t.treatment_type or '—' }}</td>
+      <td data-label="Medicine">{{ t.medicine_catalog_name or t.medicine_name or '—' }}</td>
+      <td data-label="Withdrawal">
+        {% if t.meat_withdrawal_end and t.meat_withdrawal_end >= today %}<span class="pill red">meat until {{ t.meat_withdrawal_end }}</span>{% endif %}
+        {% if t.milk_withdrawal_end and t.milk_withdrawal_end >= today %}<span class="pill red">milk until {{ t.milk_withdrawal_end }}</span>{% endif %}
+      </td>
+      <td data-label="Follow-up">{{ t.follow_up_date or '—' }}</td>
+    </tr>
+    {% endfor %}
+    </tbody></table></div>
+    {% if not treatments %}<p class="muted">No treatments recorded yet.</p>{% endif %}
+  </div>
+
+{% elif tab == 'withdrawal' %}
+  <div class="card section">
+    <h3>Animals currently within a withdrawal period</h3>
+    <p class="small muted">Milk or meat from these animals should not be used/sold until the listed date.</p>
+    {% if withdrawal %}
+    <div class="table-wrap"><table class="data"><thead><tr><th>Animal</th><th>Meat withdrawal until</th><th>Milk withdrawal until</th></tr></thead><tbody>
+    {% for w in withdrawal %}
+    <tr><td data-label="Animal"><a href="{{ url_for('animals.profile', animal_id=w.animal_id) }}">{{ w.tag_id }}</a></td>
+      <td data-label="Meat">{% if w.meat_withdrawal_end and w.meat_withdrawal_end >= today %}<span class="pill red">{{ w.meat_withdrawal_end }}</span>{% else %}—{% endif %}</td>
+      <td data-label="Milk">{% if w.milk_withdrawal_end and w.milk_withdrawal_end >= today %}<span class="pill red">{{ w.milk_withdrawal_end }}</span>{% else %}—{% endif %}</td>
+    </tr>
+    {% endfor %}
+    </tbody></table></div>
+    {% else %}<p class="muted">No animals are currently in a withdrawal period.</p>{% endif %}
+  </div>
+
+{% elif tab == 'medicines' %}
+  <div class="card section">
+    <h3>Add a medicine or vaccine</h3>
+    <form method="post" action="{{ url_for('health.add_medicine') }}" class="form-grid">
+      <div class="field"><label>Name *</label><input type="text" name="name" required></div>
+      <div class="field"><label>Type</label><select name="type"><option value="medicine">Medicine</option><option value="vaccine">Vaccine</option></select></div>
+      <div class="field"><label>Default meat withdrawal (days)</label><input type="number" name="default_meat_withdrawal_days" value="0"></div>
+      <div class="field"><label>Default milk withdrawal (days)</label><input type="number" name="default_milk_withdrawal_days" value="0"></div>
+      <div class="field" style="grid-column:1/-1;"><label>Notes</label><input type="text" name="notes"></div>
+      <div><button class="btn" type="submit">Add to catalog</button></div>
+    </form>
+  </div>
+  <div class="card section">
+    <table class="data"><thead><tr><th>Name</th><th>Type</th><th>Meat withdrawal (d)</th><th>Milk withdrawal (d)</th></tr></thead><tbody>
+    {% for m in medicines %}<tr><td data-label="Name">{{ m.name }}</td><td data-label="Type">{{ m.type }}</td><td data-label="Meat">{{ m.default_meat_withdrawal_days }}</td><td data-label="Milk">{{ m.default_milk_withdrawal_days }}</td></tr>{% endfor %}
+    </tbody></table>
+  </div>
+{% endif %}
+{% endblock %}

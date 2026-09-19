@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - {{ app_name }}{% endblock %}
+{% block heading %}Dashboard{% endblock %}
+{% block content %}
+
+<form class="toolbar card" method="get" style="margin-bottom:1.4rem;">
+  <div class="field">
+    <label>Site</label>
+    <select name="site_id" onchange="this.form.submit()">
+      <option value="">All sites</option>
+      {% for s in sites %}<option value="{{ s.id }}" {{ 'selected' if f_site_id==s.id }}>{{ s.name }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label>Species</label>
+    <select name="species_id" onchange="this.form.submit()">
+      <option value="">All species</option>
+      {% for s in species_list %}<option value="{{ s.id }}" {{ 'selected' if f_species_id==s.id }}>{{ s.name }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label>Group</label>
+    <select name="group_id" onchange="this.form.submit()">
+      <option value="">All groups</option>
+      {% for g in groups %}<option value="{{ g.id }}" {{ 'selected' if f_group_id==g.id }}>{{ g.name }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="field"><label>Period from</label><input type="date" name="date_from" value="{{ f_date_from }}"></div>
+  <div class="field"><label>Period to</label><input type="date" name="date_to" value="{{ f_date_to }}"></div>
+  <button class="btn secondary small" type="submit">Apply filters</button>
+  <a class="btn subtle small" href="{{ url_for('dashboard.index') }}">Reset</a>
+</form>
+
+<div class="section">
+  <h2>Herd summary</h2>
+  <div class="grid cols-5">
+    <div class="stat-card"><div class="stat-label">Total active animals</div><div class="stat-value">{{ total_active }}</div></div>
+    {% for name, count in by_species.items() %}
+    <div class="stat-card"><div class="stat-label">{{ name }}</div><div class="stat-value">{{ count }}</div></div>
+    {% endfor %}
+    <div class="stat-card"><div class="stat-label">Females</div><div class="stat-value">{{ females_count }}</div></div>
+    <div class="stat-card"><div class="stat-label">Males</div><div class="stat-value">{{ males_count }}</div></div>
+    <div class="stat-card"><div class="stat-label">Young stock</div><div class="stat-value">{{ young_stock_count }}</div></div>
+    <div class="stat-card"><div class="stat-label">Breeding animals</div><div class="stat-value">{{ breeding_count }}</div></div>
+    <div class="stat-card"><div class="stat-label">Pregnant</div><div class="stat-value">{{ pregnant_count }}</div></div>
+  </div>
+</div>
+
+<div class="section">
+  <h2>This period ({{ f_date_from|fmtdate }} &ndash; {{ f_date_to|fmtdate }})</h2>
+  <div class="grid cols-5">
+    <div class="stat-card"><div class="stat-label">Births</div><div class="stat-value">{{ births_in_period }}</div></div>
+    <div class="stat-card"><div class="stat-label">Purchases</div><div class="stat-value">{{ purchases_in_period }}</div></div>
+    <div class="stat-card"><div class="stat-label">Sold</div><div class="stat-value">{{ status_counts.get('sold', 0) }}</div></div>
+    <div class="stat-card"><div class="stat-label">Transferred</div><div class="stat-value">{{ status_counts.get('transferred', 0) }}</div></div>
+    <div class="stat-card"><div class="stat-label">Slaughtered</div><div class="stat-value">{{ status_counts.get('slaughtered', 0) }}</div></div>
+    <div class="stat-card"><div class="stat-label">Deceased</div><div class="stat-value">{{ status_counts.get('deceased', 0) }}</div></div>
+    <div class="stat-card"><div class="stat-label">Missing</div><div class="stat-value">{{ status_counts.get('missing', 0) }}</div></div>
+  </div>
+</div>
+
+<div class="section">
+  <h2>Needs attention</h2>
+  <div class="grid cols-5">
+    <a class="stat-card amber link" href="{{ url_for('tasks.index') }}?type=follow_up"><div class="stat-label">Treatments due</div><div class="stat-value">{{ treatments_due }}</div><div class="stat-sub">next 14 days</div></a>
+    <a class="stat-card amber link" href="{{ url_for('tasks.index') }}?type=vaccination"><div class="stat-label">Vaccinations due</div><div class="stat-value">{{ vaccinations_due }}</div><div class="stat-sub">next 14 days</div></a>
+    <a class="stat-card link" href="{{ url_for('breeding.index') }}"><div class="stat-label">Expected births</div><div class="stat-value">{{ expected_births }}</div><div class="stat-sub">next 14 days</div></a>
+    <a class="stat-card amber link" href="{{ url_for('weights.index') }}"><div class="stat-label">Not weighed recently</div><div class="stat-value">{{ not_weighed|length }}</div><div class="stat-sub">over 60 days</div></a>
+    <a class="stat-card red link" href="{{ url_for('weights.index') }}"><div class="stat-label">Losing weight</div><div class="stat-value">{{ losing_weight|length }}</div></a>
+    <a class="stat-card red link" href="{{ url_for('health.index') }}?tab=withdrawal"><div class="stat-label">In withdrawal period</div><div class="stat-value">{{ withdrawal_animals|length }}</div></a>
+    <a class="stat-card amber link" href="{{ url_for('animals.list_view') }}?incomplete=1"><div class="stat-label">Incomplete records</div><div class="stat-value">{{ incomplete|length }}</div></a>
+    <div class="stat-card"><div class="stat-label">Avg. current weight</div><div class="stat-value">{{ avg_current_weight if avg_current_weight is not none else '—' }}{% if avg_current_weight is not none %} kg{% endif %}</div></div>
+    <div class="stat-card {{ 'red' if avg_change is not none and avg_change < 0 }}"><div class="stat-label">Avg. weight change</div><div class="stat-value">{{ '%+0.2f'|format(avg_change) if avg_change is not none else '—' }}{% if avg_change is not none %} kg{% endif %}</div></div>
+  </div>
+</div>
+
+<div class="grid cols-2 section">
+  <div class="card">
+    <h3>Herd population over time (12 months)</h3>
+    {{ pop_chart|safe }}
+  </div>
+  <div class="card">
+    <h3>Average weight trend (12 months)</h3>
+    {{ weight_chart|safe }}
+  </div>
+</div>
+
+<div class="grid cols-2 section">
+  <div class="card">
+    <h3>By species / sex / breed / age / group</h3>
+    <table class="data">
+      <tbody>
+      {% for label, data in [('Species', by_species), ('Sex', by_sex), ('Breed', by_breed), ('Age class', by_age_class), ('Group', by_group)] %}
+        <tr><td colspan="2" style="font-weight:800; color:var(--green-800); background:var(--green-50);">{{ label }}</td></tr>
+        {% for k, v in data.items() %}<tr><td>{{ k }}</td><td>{{ v }}</td></tr>{% endfor %}
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h3>Upcoming tasks &amp; alerts</h3>
+    {% if upcoming_tasks %}
+    <ul class="timeline">
+      {% for t in upcoming_tasks %}
+      <li>
+        <div class="t-date">{{ t.due_date|fmtdate }} {% if t.due_date < today %}<span class="pill red">Overdue</span>{% endif %}</div>
+        <div class="t-title">{{ t.title }}</div>
+        <div class="small muted">{{ t.task_type.replace('_',' ')|title }} {% if t.assignee %}&middot; {{ t.assignee }}{% endif %}</div>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}<p class="muted">No upcoming tasks in this window.</p>{% endif %}
+    <a href="{{ url_for('tasks.index') }}" class="btn secondary small">View all tasks</a>
+  </div>
+</div>
+
+<div class="card section">
+  <h3>Recently added animals</h3>
+  {% if recently_added %}
+  <div class="table-wrap"><table class="data" id="recentTable">
+    <thead><tr><th>Record #</th><th>Tag</th><th>Name</th><th>Species</th><th>Added</th></tr></thead>
+    <tbody>
+    {% for a in recently_added %}
+    <tr>
+      <td data-label="Record #"><a href="{{ url_for('animals.profile', animal_id=a.id) }}">{{ a.record_no }}</a></td>
+      <td data-label="Tag">{{ a.tag_id }}</td>
+      <td data-label="Name">{{ a.name or '—' }}</td>
+      <td data-label="Species">{{ a.species_name }}</td>
+      <td data-label="Added">{{ a.created_at|fmtdate }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}<p class="muted">No animals recorded yet.</p>{% endif %}
+</div>
+
+{% endblock %}

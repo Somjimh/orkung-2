@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit' if animal else 'Add' }} Animal - {{ app_name }}{% endblock %}
+{% block heading %}{{ 'Edit animal' if animal else 'Add animal' }}{% endblock %}
+{% block content %}
+<form method="post" enctype="multipart/form-data" class="card" data-draft-key="animal-{{ animal.id if animal else 'new' }}">
+  {% if errors %}
+  <div class="flash error">Please fix the highlighted fields below.</div>
+  {% endif %}
+
+  <fieldset>
+    <legend>Identification</legend>
+    <div class="form-grid">
+      <div class="field">
+        <label for="tag_id">Ear-tag / ID number *</label>
+        <input type="text" id="tag_id" name="tag_id" value="{{ form.tag_id or '' }}" required>
+        {% if errors.tag_id %}<div class="error">{{ errors.tag_id|safe }}</div>{% endif %}
+      </div>
+      <div class="field">
+        <label for="eid">Electronic ID (if available)</label>
+        <input type="text" id="eid" name="eid" value="{{ form.eid or '' }}">
+      </div>
+      <div class="field">
+        <label for="name">Name (if used)</label>
+        <input type="text" id="name" name="name" value="{{ form.name or '' }}">
+      </div>
+      <div class="field">
+        <label for="species_id">Species *</label>
+        <select id="species_id" name="species_id" required>
+          <option value="">Select&hellip;</option>
+          {% for s in species_list %}<option value="{{ s.id }}" {{ 'selected' if (form.species_id|string)==(s.id|string) }}>{{ s.name }}</option>{% endfor %}
+        </select>
+        {% if errors.species_id %}<div class="error">{{ errors.species_id }}</div>{% endif %}
+      </div>
+      <div class="field">
+        <label for="breed_id">Breed</label>
+        <select id="breed_id" name="breed_id">
+          <option value="">Select&hellip;</option>
+          {% for b in breeds %}<option value="{{ b.id }}" data-species="{{ b.species_id }}" {{ 'selected' if (form.breed_id|string)==(b.id|string) }}>{{ b.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="sex">Sex *</label>
+        <select id="sex" name="sex" required>
+          <option value="">Select&hellip;</option>
+          <option value="female" {{ 'selected' if form.sex=='female' }}>Female</option>
+          <option value="male" {{ 'selected' if form.sex=='male' }}>Male</option>
+        </select>
+        {% if errors.sex %}<div class="error">{{ errors.sex }}</div>{% endif %}
+      </div>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Birth details</legend>
+    <div class="form-grid">
+      <div class="field">
+        <label for="dob">Date of birth</label>
+        <input type="date" id="dob" name="dob" value="{{ form.dob or '' }}">
+        {% if errors.dob %}<div class="error">{{ errors.dob }}</div>{% endif %}
+        <div class="checkbox-row" style="margin-top:.4rem;">
+          <input type="checkbox" id="dob_estimated" name="dob_estimated" {{ 'checked' if form.dob_estimated }}>
+          <label for="dob_estimated" style="margin:0;">Estimated age</label>
+        </div>
+      </div>
+      <div class="field">
+        <label for="birth_type">Birth type</label>
+        <select id="birth_type" name="birth_type">
+          <option value="">Select&hellip;</option>
+          {% for t in ['single','twin','triplet','other'] %}<option value="{{ t }}" {{ 'selected' if form.birth_type==t }}>{{ t|capitalize }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="birth_weight">Birth weight (kg)</label>
+        <input type="number" step="0.01" id="birth_weight" name="birth_weight" value="{{ form.birth_weight or '' }}">
+        {% if errors.birth_weight %}<div class="error">{{ errors.birth_weight }}</div>{% endif %}
+      </div>
+      <div class="field">
+        <label for="color_markings">Colour / identifying marks</label>
+        <input type="text" id="color_markings" name="color_markings" value="{{ form.color_markings or '' }}">
+      </div>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Parentage</legend>
+    <div class="form-grid">
+      <div class="field">
+        <label for="sire_id">Sire</label>
+        <select id="sire_id" name="sire_id">
+          <option value="">Unknown / not on farm</option>
+          {% for m in males %}<option value="{{ m.id }}" {{ 'selected' if (form.sire_id|string)==(m.id|string) }}>{{ m.tag_id }}{% if m.name %} ({{ m.name }}){% endif %}</option>{% endfor %}
+        </select>
+        {% if errors.sire_id %}<div class="error">{{ errors.sire_id }}</div>{% endif %}
+      </div>
+      <div class="field">
+        <label for="dam_id">Dam</label>
+        <select id="dam_id" name="dam_id">
+          <option value="">Unknown / not on farm</option>
+          {% for fm in females %}<option value="{{ fm.id }}" {{ 'selected' if (form.dam_id|string)==(fm.id|string) }}>{{ fm.tag_id }}{% if fm.name %} ({{ fm.name }}){% endif %}</option>{% endfor %}
+        </select>
+        {% if errors.dam_id %}<div class="error">{{ errors.dam_id }}</div>{% endif %}
+      </div>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Location &amp; status</legend>
+    <div class="form-grid">
+      <div class="field">
+        <label for="current_group_id">Current group</label>
+        <select id="current_group_id" name="current_group_id">
+          <option value="">Unassigned</option>
+          {% for gr in groups %}<option value="{{ gr.id }}" {{ 'selected' if (form.current_group_id|string)==(gr.id|string) }}>{{ gr.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="current_site_id">Current site / location</label>
+        <select id="current_site_id" name="current_site_id">
+          <option value="">Unassigned</option>
+          {% for s in sites %}<option value="{{ s.id }}" {{ 'selected' if (form.current_site_id|string)==(s.id|string) }}>{{ s.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="reproductive_status">Reproductive status</label>
+        <select id="reproductive_status" name="reproductive_status">
+          {% for v,l in [('not_breeding','Not breeding'),('young_stock','Young stock'),('open','Open (breeding age)'),('pregnant','Pregnant'),('lactating','Lactating'),('retired','Retired')] %}
+          <option value="{{ v }}" {{ 'selected' if form.reproductive_status==v }}>{{ l }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Source</legend>
+    <div class="form-grid">
+      <div class="field">
+        <label for="source">Source</label>
+        <select id="source" name="source">
+          <option value="born_on_farm" {{ 'selected' if form.source=='born_on_farm' }}>Born on farm</option>
+          <option value="purchased" {{ 'selected' if form.source=='purchased' }}>Purchased</option>
+          <option value="transferred_in" {{ 'selected' if form.source=='transferred_in' }}>Transferred in</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="acquisition_date">Acquisition date</label>
+        <input type="date" id="acquisition_date" name="acquisition_date" value="{{ form.acquisition_date or '' }}">
+      </div>
+      <div class="field">
+        <label for="supplier">Supplier / previous owner</label>
+        <input type="text" id="supplier" name="supplier" value="{{ form.supplier or '' }}">
+      </div>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Photo &amp; notes</legend>
+    <div class="form-grid">
+      <div class="field">
+        <label for="photo">Photograph</label>
+        <input type="file" id="photo" name="photo" accept="image/*">
+        {% if animal and animal.photo_path %}<div class="hint">A photo is already on file; choose a new one to replace it.</div>{% endif %}
+      </div>
+      <div class="field">
+        <label for="notes">Notes</label>
+        <textarea id="notes" name="notes">{{ form.notes or '' }}</textarea>
+      </div>
+    </div>
+    {% if errors.tag_id and current_user.role == 'admin' %}
+    <div class="checkbox-row">
+      <input type="checkbox" id="override_duplicate_tag" name="override_duplicate_tag">
+      <label for="override_duplicate_tag" style="margin:0;">Administrator override: resolve duplicate tag conflict and save anyway</label>
+    </div>
+    {% endif %}
+  </fieldset>
+
+  <div class="btn-row">
+    <button type="submit" class="btn">Save animal</button>
+    <a href="{{ url_for('animals.list_view') }}" class="btn secondary">Cancel</a>
+  </div>
+</form>
+{% endblock %}
+{% block scripts %}
+<script>
+  // Filter breed dropdown to the selected species (progressive enhancement only).
+  (function(){
+    var speciesSel = document.getElementById('species_id');
+    var breedSel = document.getElementById('breed_id');
+    if (!speciesSel || !breedSel) return;
+    var allOptions = Array.prototype.slice.call(breedSel.options);
+    function refresh(){
+      var sid = speciesSel.value;
+      allOptions.forEach(function(opt){
+        if (!opt.value) { opt.hidden = false; return; }
+        opt.hidden = sid && opt.getAttribute('data-species') !== sid;
+      });
+    }
+    speciesSel.addEventListener('change', refresh);
+    refresh();
+  })();
+</script>
+{% endblock %}

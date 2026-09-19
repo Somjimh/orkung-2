@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}{{ group.name }} - {{ app_name }}{% endblock %}
+{% block heading %}{{ group.name }}{% endblock %}
+{% block content %}
+<div class="grid cols-4 section">
+  <div class="stat-card"><div class="stat-label">Active animals</div><div class="stat-value">{{ current_members|length }}</div></div>
+  <div class="stat-card"><div class="stat-label">Average weight</div><div class="stat-value">{{ avg_weight if avg_weight is not none else '—' }}{% if avg_weight is not none %} kg{% endif %}</div></div>
+  <div class="stat-card {{ 'red' if open_treatments }}"><div class="stat-label">In withdrawal</div><div class="stat-value">{{ open_treatments }}</div></div>
+  <div class="stat-card"><div class="stat-label">Pregnant</div><div class="stat-value">{{ pregnant }}</div></div>
+</div>
+
+<div class="card section">
+  <h3>Current members</h3>
+  {% if current_members %}
+  <div class="table-wrap"><table class="data"><thead><tr><th>Tag</th><th>Name</th><th>Sex</th><th>Status</th></tr></thead><tbody>
+  {% for m in current_members %}<tr><td data-label="Tag"><a href="{{ url_for('animals.profile', animal_id=m.id) }}">{{ m.tag_id }}</a></td><td data-label="Name">{{ m.name or '—' }}</td><td data-label="Sex">{{ m.sex|capitalize }}</td><td data-label="Status"><span class="pill green">Active</span></td></tr>{% endfor %}
+  </tbody></table></div>
+  {% else %}<p class="muted">No animals currently in this group.</p>{% endif %}
+</div>
+
+<div class="card section">
+  <h3>Membership history</h3>
+  {% if history %}
+  <div class="table-wrap"><table class="data"><thead><tr><th>Animal</th><th>From</th><th>To</th></tr></thead><tbody>
+  {% for h in history %}<tr><td data-label="Animal">{{ h.tag_id }}</td><td data-label="From">{{ h.start_date }}</td><td data-label="To">{{ h.end_date or 'current' }}</td></tr>{% endfor %}
+  </tbody></table></div>
+  {% else %}<p class="muted">No membership history yet.</p>{% endif %}
+</div>
+{% endblock %}

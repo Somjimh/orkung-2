@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Import Animals - {{ app_name }}{% endblock %}
+{% block heading %}Import Animals{% endblock %}
+{% block content %}
+<div class="tabs">
+  <a href="{{ url_for('admin.users') }}">Users</a>
+  <a href="{{ url_for('admin.settings') }}">Species &amp; breeds</a>
+  <a href="{{ url_for('admin.import_form') }}" class="active">Import animals</a>
+  <a href="{{ url_for('admin.backup') }}">Backup</a>
+  <a href="{{ url_for('reports.audit_report') }}">Audit history</a>
+</div>
+<div class="card section">
+  <h3>1. Download the template</h3>
+  <p class="small muted">Columns: {{ header|join(', ') }}</p>
+  <a class="btn secondary" href="{{ url_for('admin.import_template') }}">Download CSV template</a>
+</div>
+<div class="card section">
+  <h3>2. Upload &amp; preview</h3>
+  <p class="small muted">Your file will be checked for duplicate tags and missing required fields before anything is saved.</p>
+  <form method="post" action="{{ url_for('admin.import_preview') }}" enctype="multipart/form-data">
+    <div class="field"><input type="file" name="file" accept=".csv" required></div>
+    <button class="btn" type="submit">Preview import</button>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Tasks &amp; Alerts - {{ app_name }}{% endblock %}
+{% block heading %}Tasks &amp; Alerts{% endblock %}
+{% block content %}
+{% if current_user.role in ('admin','manager') %}
+<div class="card section">
+  <h3>Create a task / reminder</h3>
+  <form method="post" action="{{ url_for('tasks.add') }}" class="form-grid">
+    <div class="field" style="grid-column:1/-1;"><label>Title *</label><input type="text" name="title" required></div>
+    <div class="field"><label>Type</label><select name="task_type">{% for v,l in task_types %}<option value="{{ v }}">{{ l }}</option>{% endfor %}</select></div>
+    <div class="field"><label>Due date *</label><input type="date" name="due_date" required></div>
+    <div class="field"><label>Assign to</label><select name="assigned_to"><option value="">Unassigned</option>{% for u in users %}<option value="{{ u.id }}">{{ u.full_name }}</option>{% endfor %}</select></div>
+    <div class="field"><label>Priority</label><select name="priority"><option value="normal">Normal</option><option value="high">High</option><option value="urgent">Urgent</option></select></div>
+    <div class="field" style="grid-column:1/-1;"><label>Description</label><textarea name="description"></textarea></div>
+    <div><button class="btn" type="submit">Create task</button></div>
+  </form>
+</div>
+{% endif %}
+
+<form class="toolbar card" method="get">
+  <div class="field"><label>Status</label>
+    <select name="status" onchange="this.form.submit()">
+      <option value="pending" {{ 'selected' if status=='pending' }}>Pending</option>
+      <option value="completed" {{ 'selected' if status=='completed' }}>Completed</option>
+      <option value="all" {{ 'selected' if status=='all' }}>All</option>
+    </select>
+  </div>
+  <div class="field"><label>Type</label>
+    <select name="type" onchange="this.form.submit()"><option value="">All</option>
+    {% for v,l in task_types %}<option value="{{ v }}" {{ 'selected' if ttype==v }}>{{ l }}</option>{% endfor %}
+    </select>
+  </div>
+</form>
+
+<div class="table-wrap">
+<table class="data">
+  <thead><tr><th>Due</th><th>Title</th><th>Type</th><th>Assigned to</th><th>Priority</th><th>Status</th><th>Actions</th></tr></thead>
+  <tbody>
+  {% for t in rows %}
+  <tr>
+    <td data-label="Due">{{ t.due_date }} {% if t.status=='pending' and t.due_date < today %}<span class="pill red">Overdue</span>{% endif %}</td>
+    <td data-label="Title">{{ t.title }}</td>
+    <td data-label="Type">{{ t.task_type.replace('_',' ')|title }}</td>
+    <td data-label="Assigned to">{{ t.assignee or '—' }}</td>
+    <td data-label="Priority"><span class="pill {{ 'red' if t.priority=='urgent' else ('amber' if t.priority=='high' else 'gray') }}">{{ t.priority }}</span></td>
+    <td data-label="Status">
+      {% if t.status == 'completed' %}<span class="pill green">Completed {{ t.completed_at|fmtdate }}{% if t.completer %} by {{ t.completer }}{% endif %}</span>
+      {% elif t.status == 'cancelled' %}<span class="pill gray">Cancelled</span>
+      {% else %}<span class="pill amber">Pending</span>{% endif %}
+    </td>
+    <td data-label="Actions">
+      {% if t.status == 'pending' %}
+      <form method="post" action="{{ url_for('tasks.complete', task_id=t.id) }}" style="display:inline;">
+        <input type="hidden" name="return_status" value="{{ status }}">
+        <button class="btn small secondary" type="submit">Mark complete</button>
+      </form>
+      {% if current_user.role in ('admin','manager') %}
+      <form method="post" action="{{ url_for('tasks.cancel', task_id=t.id) }}" style="display:inline;">
+        <button class="btn small subtle" type="submit" data-confirm="Cancel this task?">Cancel</button>
+      </form>
+      {% endif %}
+      {% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% if not rows %}<div class="empty-state"><p>No tasks match this filter.</p></div>{% endif %}
+{% endblock %}

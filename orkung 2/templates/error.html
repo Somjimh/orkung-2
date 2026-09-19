@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}{{ code }} - {{ app_name }}{% endblock %}
+{% block heading %}{{ code }}{% endblock %}
+{% block content %}
+<div class="empty-state card">
+  <div class="big-ic">{{ '&#9888;'|safe if code == 403 else '&#128269;'|safe }}</div>
+  <h2>{{ message }}</h2>
+  <p><a href="{{ url_for('dashboard.index') }}">Return to dashboard</a></p>
+</div>
+{% endblock %}
+{% block guest_content %}
+<div style="min-height:100vh; display:flex; align-items:center; justify-content:center;">
+  <div class="card" style="max-width:420px; text-align:center; padding:2rem;">
+    <h2>{{ message }}</h2>
+    <p><a href="{{ url_for('auth.login') }}">Go to sign in</a></p>
+  </div>
+</div>
+{% endblock %}

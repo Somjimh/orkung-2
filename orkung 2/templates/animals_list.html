@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}Animals - {{ app_name }}{% endblock %}
+{% block heading %}Animal Register{% endblock %}
+{% block topbar_actions %}
+{% if 'add_animal' in nav %}<a class="btn" href="{{ url_for('animals.add') }}">+ Add animal</a>{% endif %}
+<a class="btn secondary" href="{{ url_for('reports.export_animals', **request.args) }}">Export CSV</a>
+{% endblock %}
+{% block content %}
+<form class="toolbar card" method="get">
+  <div class="field" style="min-width:220px;">
+    <label>Search</label>
+    <input type="search" name="q" value="{{ q }}" placeholder="Tag, name or electronic ID">
+  </div>
+  <div class="field">
+    <label>Species</label>
+    <select name="species_id"><option value="">All</option>
+      {% for s in species_list %}<option value="{{ s.id }}" {{ 'selected' if f_species_id==s.id }}>{{ s.name }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label>Sex</label>
+    <select name="sex"><option value="">All</option>
+      <option value="female" {{ 'selected' if f_sex=='female' }}>Female</option>
+      <option value="male" {{ 'selected' if f_sex=='male' }}>Male</option>
+    </select>
+  </div>
+  <div class="field">
+    <label>Breed</label>
+    <select name="breed_id"><option value="">All</option>
+      {% for b in breeds %}<option value="{{ b.id }}" {{ 'selected' if f_breed_id==b.id }}>{{ b.name }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label>Group</label>
+    <select name="group_id"><option value="">All</option>
+      {% for gr in groups %}<option value="{{ gr.id }}" {{ 'selected' if f_group_id==gr.id }}>{{ gr.name }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label>Site</label>
+    <select name="site_id"><option value="">All</option>
+      {% for s in sites %}<option value="{{ s.id }}" {{ 'selected' if f_site_id==s.id }}>{{ s.name }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label>Status</label>
+    <select name="status">
+      <option value="active" {{ 'selected' if f_status=='active' }}>Active</option>
+      <option value="all" {{ 'selected' if f_status=='all' }}>All</option>
+      <option value="sold" {{ 'selected' if f_status=='sold' }}>Sold</option>
+      <option value="transferred" {{ 'selected' if f_status=='transferred' }}>Transferred</option>
+      <option value="slaughtered" {{ 'selected' if f_status=='slaughtered' }}>Slaughtered</option>
+      <option value="missing" {{ 'selected' if f_status=='missing' }}>Missing</option>
+      <option value="deceased" {{ 'selected' if f_status=='deceased' }}>Deceased</option>
+    </select>
+  </div>
+  <button class="btn secondary small" type="submit">Filter</button>
+  <a class="btn subtle small" href="{{ url_for('animals.list_view') }}">Reset</a>
+</form>
+
+{% if animals %}
+<div class="table-wrap">
+<table class="data" id="animalsTable">
+  <thead><tr>
+    <th>Record #</th><th>Tag</th><th>Name</th><th>Species / Breed</th><th>Sex</th><th>Age</th>
+    <th>Group</th><th>Status</th><th>Reproductive</th>
+  </tr></thead>
+  <tbody>
+  {% for a in animals %}
+  <tr>
+    <td data-label="Record #"><a href="{{ url_for('animals.profile', animal_id=a.id) }}"><strong>{{ a.record_no }}</strong></a></td>
+    <td data-label="Tag">{{ a.tag_id }}</td>
+    <td data-label="Name">{{ a.name or '—' }}</td>
+    <td data-label="Species / Breed"><span class="badge-species">{{ a.species_name }}</span> {{ a.breed_name or '' }}</td>
+    <td data-label="Sex">{{ a.sex|capitalize }}</td>
+    <td data-label="Age">{{ a.dob|age(a.dob_estimated) }}</td>
+    <td data-label="Group">{{ a.group_name or '—' }}</td>
+    <td data-label="Status">
+      {% if a.status == 'active' %}<span class="pill green">Active</span>
+      {% elif a.status in ('missing',) %}<span class="pill red">{{ a.status|capitalize }}</span>
+      {% else %}<span class="pill gray">{{ a.status|capitalize }}</span>{% endif %}
+    </td>
+    <td data-label="Reproductive">{{ a.reproductive_status.replace('_',' ')|capitalize }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+<p class="small muted">{{ animals|length }} animal(s) shown.</p>
+{% else %}
+<div class="empty-state card">
+  <div class="big-ic">&#128366;</div>
+  <h3>No animals match these filters</h3>
+  <p>{% if 'add_animal' in nav %}<a href="{{ url_for('animals.add') }}">Add your first animal</a>{% else %}Try widening your filters.{% endif %}</p>
+</div>
+{% endif %}
+{% endblock %}
