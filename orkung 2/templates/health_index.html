@@ -36,14 +36,36 @@
   {% if can_edit %}
   <div class="card section">
     <h3>Record a treatment or vaccination</h3>
-    <form method="post" action="{{ url_for('health.add_treatment') }}" class="form-grid" data-draft-key="treatment-new">
-      <div class="field"><label>Animal *</label><select name="animal_id" required><option value="">Select&hellip;</option>{% for a in animals %}<option value="{{ a.id }}">{{ a.tag_id }}{% if a.name %} ({{ a.name }}){% endif %}</option>{% endfor %}</select></div>
+    <form method="post" action="{{ url_for('health.add_treatment') }}" class="form-grid" data-draft-key="treatment-new" id="treatForm">
+      <div class="field"><label>Who gets it? *</label>
+        <select name="target" id="treatTarget" onchange="treatTargetChanged()">
+          <option value="one">One animal</option>
+          {% if species_counts.get('Goat') %}<option value="all_goats">All goats ({{ species_counts['Goat'] }})</option>{% endif %}
+          {% if species_counts.get('Sheep') %}<option value="all_sheep">All sheep ({{ species_counts['Sheep'] }})</option>{% endif %}
+          {% if species_counts.get('Goat') and species_counts.get('Sheep') %}<option value="all">All goats and sheep ({{ species_counts['Goat'] + species_counts['Sheep'] }})</option>{% endif %}
+          {% if groups %}<option value="group">A group</option>{% endif %}
+          <option value="pick">Pick several animals</option>
+        </select></div>
+      <div class="field" id="tgtOne"><label>Animal</label><select name="animal_id"><option value="">Select&hellip;</option>{% for a in animals %}<option value="{{ a.id }}">{{ a.species_name }} {{ a.tag_id }}{% if a.name %} ({{ a.name }}){% endif %}</option>{% endfor %}</select></div>
+      <div class="field" id="tgtGroup" style="display:none;"><label>Group</label><select name="group_id"><option value="">Select&hellip;</option>{% for gr in groups %}<option value="{{ gr.id }}">{{ gr.name }}</option>{% endfor %}</select></div>
+      <div class="field" id="tgtPick" style="grid-column:1/-1;display:none;">
+        <label>Tick the animals <span class="muted small" id="pickCount"></span></label>
+        {% for sp in species_counts %}
+        <div style="margin:.4rem 0;"><strong>{{ sp }}</strong>
+          <button type="button" class="btn subtle small" onclick="tickAll('{{ sp }}',true)">Tick all {{ sp|lower }}</button>
+          <button type="button" class="btn subtle small" onclick="tickAll('{{ sp }}',false)">Clear</button></div>
+        <div style="display:flex;flex-wrap:wrap;gap:.3rem .9rem;margin-bottom:.6rem;">
+          {% for a in animals if a.species_name == sp %}<label style="font-weight:normal;white-space:nowrap;"><input type="checkbox" name="animal_ids" value="{{ a.id }}" data-sp="{{ sp }}" onchange="countPicked()"> {{ a.tag_id }}</label>{% endfor %}
+        </div>
+        {% endfor %}
+      </div>
       <div class="field"><label>Treatment / procedure</label><input type="text" name="treatment_type" placeholder="e.g. deworming, wound care, vaccination"></div>
       <div class="field"><label>Medicine / vaccine (catalog)</label>
         <select name="medicine_id"><option value="">Not in catalog / other</option>{% for m in medicines %}<option value="{{ m.id }}">{{ m.name }} ({{ m.type }})</option>{% endfor %}</select>
       </div>
-      <div class="field"><label>Medicine name (if not in catalog)</label><input type="text" name="medicine_name"></div>
-      <div class="field"><label>Dose</label><input type="text" name="dose"></div>
+      <div class="field"><label>Medicine name (if not in catalog)</label><input type="text" name="medicine_name" list="stockNames" placeholder="Pick a stock item or type"></div>
+      <datalist id="stockNames">{% for n in stock_names %}<option value="{{ n }}">{% endfor %}</datalist>
+      <div class="field"><label>Dose (per animal)</label><input type="text" name="dose"></div>
       <div class="field"><label>Dose unit</label><input type="text" name="dose_unit" placeholder="ml, mg, cc&hellip;"></div>
       <div class="field"><label>Route of administration</label><input type="text" name="route" placeholder="IM, SC, oral&hellip;"></div>
       <div class="field"><label>Start date *</label><input type="date" name="start_date" required></div>
@@ -55,7 +77,7 @@
       <div class="field"><label>Follow-up date</label><input type="date" name="follow_up_date"></div>
       <div class="field"><label>Result</label><input type="text" name="result"></div>
       <div class="field" style="grid-column:1/-1;"><label>Notes / attachments</label><textarea name="notes"></textarea></div>
-      <div class="hint" style="grid-column:1/-1;">Leave withdrawal dates blank to auto-calculate from the selected catalog medicine's defaults and the start date.</div>
+      <div class="hint" style="grid-column:1/-1;">For a whole species, a group or several animals, one treatment record is saved for each animal, and the dose is taken off the medicine stock for each one. Leave withdrawal dates blank to auto-calculate from the selected catalog medicine's defaults and the start date.</div>
       <div><button class="btn" type="submit">Save treatment</button></div>
     </form>
   </div>
@@ -113,4 +135,24 @@
     </tbody></table>
   </div>
 {% endif %}
+<script>
+function treatTargetChanged(){
+  var t=document.getElementById('treatTarget'); if(!t) return; t=t.value;
+  document.getElementById('tgtOne').style.display = t=='one' ? '' : 'none';
+  var g=document.getElementById('tgtGroup'); if(g) g.style.display = t=='group' ? '' : 'none';
+  document.getElementById('tgtPick').style.display = t=='pick' ? '' : 'none';
+}
+function tickAll(sp,on){ document.querySelectorAll('input[name=animal_ids][data-sp="'+sp+'"]').forEach(function(c){c.checked=on;}); countPicked(); }
+function countPicked(){ var n=document.querySelectorAll('input[name=animal_ids]:checked').length; var e=document.getElementById('pickCount'); if(e) e.textContent = n ? '('+n+' ticked)' : ''; }
+document.addEventListener('DOMContentLoaded', function(){
+  treatTargetChanged();
+  var f=document.getElementById('treatForm');
+  if(f) f.addEventListener('submit', function(ev){
+    var t=document.getElementById('treatTarget').value, n=0, what='';
+    if(t=='pick'){ n=document.querySelectorAll('input[name=animal_ids]:checked').length; what=n+' ticked animals'; }
+    else if(t!='one'){ what=document.getElementById('treatTarget').selectedOptions[0].text; }
+    if(t!='one' && !confirm('Record this treatment for '+what+'?')) ev.preventDefault();
+  });
+});
+</script>
 {% endblock %}
