@@ -29,6 +29,12 @@ KINDS = {
         label="Weights",
         header=["species", "tag_id", "measured_on", "weight_kg", "notes"],
         example=[("Goat", "039", "2026-09-12", "31.5", "From weights book")]),
+    "treatments": dict(
+        label="Treatments",
+        header=["date", "species", "tag_id", "treatment_type", "medicine", "dose", "dose_unit", "route", "reason",
+                "given_by", "vet", "withdrawal_days", "follow_up_date", "result", "notes"],
+        example=[("2026-10-05", "Goat", "ALL", "Deworming", "Albendazole (dewormer)", "5", "ml", "Oral", "Routine deworming",
+                  "Farm worker", "", "", "2026-10-19", "", "ALL = every active goat")]),
     "tasks": dict(
         label="Tasks / flags",
         header=["title", "description", "priority", "due_date", "task_type"],
@@ -71,9 +77,68 @@ def _lookups():
     return species, by_key
 
 
+ALIASES = {
+    "tag": "tag_id", "tagno": "tag_id", "tagnumber": "tag_id", "animaltag": "tag_id",
+    "treatment": "treatment_type", "treatmenttype": "treatment_type", "type": "treatment_type",
+    "medicine": "medicine", "medicinevaccine": "medicine", "drug": "medicine", "product": "medicine",
+    "unit": "dose_unit", "doseunit": "dose_unit", "reasonsigns": "reason", "reason": "reason", "signs": "reason",
+    "givenby": "given_by", "vet": "vet", "veterinarian": "vet", "withdrawaldays": "withdrawal_days",
+    "meatwithdrawaldays": "withdrawal_days", "followupdate": "follow_up_date", "followup": "follow_up_date",
+    "date": "date", "datetreated": "date", "weightkg": "weight_kg", "measuredon": "measured_on",
+    "duedate": "due_date", "tasktype": "task_type", "damtag": "dam_tag", "mothertag": "dam_tag",
+    "birthweight": "birth_weight", "statusdate": "status_date", "tagid": "tag_id",
+}
+
+
+def _key(h):
+    k = "".join(ch for ch in (h or "").lower() if ch.isalnum())
+    return ALIASES.get(k, (h or "").strip().lower().replace(" ", "_"))
+
+
+def _cell(v):
+    from datetime import datetime, date
+    if v is None:
+        return ""
+    if isinstance(v, (datetime, date)):
+        return v.strftime("%Y-%m-%d")
+    if isinstance(v, float) and v.is_integer():
+        return str(int(v))
+    return str(v).strip()
+
+
+def _xlsx_to_csv(src, dest, kind):
+    """Read the first sheet whose header row has the columns we need; write it out as CSV."""
+    from openpyxl import load_workbook
+    wb = load_workbook(src, data_only=True, read_only=True)
+    need = {"tag_id"} if kind != "tasks" else {"title"}
+    for ws in wb.worksheets:
+        rows = list(ws.iter_rows(values_only=True))
+        for hi, row in enumerate(rows[:15]):
+            keys = [_key(_cell(c)) for c in row]
+            if need <= set(keys):
+                with open(dest, "w", newline="", encoding="utf-8") as f:
+                    w = csv.writer(f)
+                    w.writerow(keys)
+                    for r in rows[hi + 1:]:
+                        vals = [_cell(c) for c in r]
+                        if any(vals):
+                            w.writerow(vals)
+                return
+    raise ValueError("no sheet with the expected column headings was found")
+
+
 def _read(path):
     with open(path, newline="", encoding="utf-8-sig") as f:
-        return [{(k or "").strip(): (v or "").strip() for k, v in r.items()} for r in csv.DictReader(f)]
+        return [{_key(k): (v or "").strip() for k, v in r.items() if k} for r in csv.DictReader(f)]
+
+
+def _treatment_targets(sid, tag, by_key):
+    tag = (tag or "").strip()
+    if tag.upper() in ("ALL", "ALL ANIMALS", "HERD", "FLOCK"):
+        return [a for a in db.query("SELECT id, tag_id FROM animals WHERE species_id=? AND status='active' ORDER BY tag_id", (sid,))]
+    tags = [t for t in tag.replace(";", ",").split(",") if t.strip()]
+    found = [by_key.get((sid, norm_tag(t))) for t in tags]
+    return [a for a in found if a and a["status"] == "active"] if len(tags) > 1 else [a for a in found if a]
 
 
 def _check(kind, rows):
@@ -138,6 +203,38 @@ def _check(kind, rows):
                 if prev and abs(wt - prev) / prev * 100 > current_app.config["WEIGHT_CHANGE_WARN_PCT"]:
                     notes.append("big change from last weight (will be flagged)")
             out.append(dict(line=i, data=r, errors=errs, notes=notes))
+    elif kind == "treatments":
+        meds = {m["name"].strip().lower() for m in db.query("SELECT name FROM medicines")}
+        done = {(t["animal_id"], (t["start_date"] or "")[:10], (t["medicine_name"] or t["mname"] or t["treatment_type"] or "").lower())
+                for t in db.query("SELECT t.animal_id, t.start_date, t.medicine_name, t.treatment_type, m.name AS mname "
+                                  "FROM treatments t LEFT JOIN medicines m ON m.id=t.medicine_id")}
+        for i, r in enumerate(rows, start=2):
+            errs, notes = [], []
+            sid = species.get(r.get("species", "").lower())
+            targets = _treatment_targets(sid, r.get("tag_id"), by_key) if sid else []
+            if not sid:
+                errs.append("unknown species")
+            elif not targets:
+                errs.append("animal not on the site")
+            if not _valid_date(r.get("date")):
+                errs.append("date must be a date (YYYY-MM-DD)")
+            what = (r.get("medicine") or r.get("treatment_type") or "").strip()
+            if not what:
+                errs.append("enter a treatment or a medicine")
+            if r.get("follow_up_date") and not _valid_date(r["follow_up_date"]):
+                errs.append("follow-up date must be a date")
+            if not errs:
+                new = [a for a in targets if (a["id"], r["date"][:10], what.lower()) not in done]
+                if not new:
+                    errs.append("already recorded (skipped)")
+                else:
+                    if len(targets) > 1:
+                        notes.append(f"applies to {len(new)} animals")
+                    if len(new) < len(targets):
+                        notes.append(f"{len(targets) - len(new)} already recorded, skipped")
+                    if r.get("medicine") and r["medicine"].strip().lower() not in meds and not r.get("withdrawal_days"):
+                        notes.append("medicine not in catalog: no automatic withdrawal date")
+            out.append(dict(line=i, data=r, errors=errs, notes=notes))
     else:
         titles = {t["title"].strip().lower() for t in db.query("SELECT title FROM tasks WHERE status='pending'")}
         seen = set()
@@ -188,11 +285,20 @@ def preview():
         return redirect(url_for("records_import.form"))
     token = uuid.uuid4().hex
     path = os.path.join(_dir(), f"{token}.csv")
-    file.save(path)
     try:
+        if file.filename.lower().endswith((".xlsx", ".xlsm")):
+            tmp = path + ".xlsx"
+            file.save(tmp)
+            try:
+                _xlsx_to_csv(tmp, path, kind)
+            finally:
+                os.remove(tmp)
+        else:
+            file.save(path)
         rows = _check(kind, _read(path))
-    except Exception as e:  # malformed CSV
-        os.remove(path)
+    except Exception as e:  # malformed file
+        if os.path.exists(path):
+            os.remove(path)
         flash(f"Could not read that file: {e}", "error")
         return redirect(url_for("records_import.form"))
     return render_template("records_import_preview.html", rows=rows, token=token, kind=kind,
@@ -277,6 +383,55 @@ def commit():
                 "VALUES (?,?,?,?,?,?,?)", (a["id"], wt, r["measured_on"][:10], "scale", r.get("notes") or None, flagged, uid))
             db.audit(g.user, "import", "weight_record", new_id, f"Imported weight {wt} kg for {r['tag_id']} on {r['measured_on']}")
             done += 1
+    elif kind == "treatments":
+        from datetime import timedelta
+        species, by_key = _lookups()
+        meds = {m["name"].strip().lower(): m for m in db.query("SELECT * FROM medicines")}
+        seen_t = {(t["animal_id"], (t["start_date"] or "")[:10], (t["medicine_name"] or t["mname"] or t["treatment_type"] or "").lower())
+                for t in db.query("SELECT t.animal_id, t.start_date, t.medicine_name, t.treatment_type, m.name AS mname "
+                                  "FROM treatments t LEFT JOIN medicines m ON m.id=t.medicine_id")}
+        for row in checked:
+            if not row["ok"]:
+                continue
+            r = row["data"]
+            sid = species[r["species"].lower()]
+            what = (r.get("medicine") or r.get("treatment_type") or "").strip()
+            med = meds.get((r.get("medicine") or "").strip().lower())
+            start = db.parse_date(r["date"])
+            wd_days = int(_f(r.get("withdrawal_days")) or 0) if r.get("withdrawal_days") else None
+            meat_wd = milk_wd = None
+            if wd_days:
+                meat_wd = (start + timedelta(days=wd_days)).isoformat()
+            elif med:
+                if med["default_meat_withdrawal_days"]:
+                    meat_wd = (start + timedelta(days=med["default_meat_withdrawal_days"])).isoformat()
+                if med["default_milk_withdrawal_days"]:
+                    milk_wd = (start + timedelta(days=med["default_milk_withdrawal_days"])).isoformat()
+            targets = [a for a in _treatment_targets(sid, r.get("tag_id"), by_key)
+                       if (a["id"], r["date"][:10], what.lower()) not in seen_t]
+            for a in targets:
+                obs_id = None
+                if r.get("reason"):
+                    obs_id = db.execute(
+                        "INSERT INTO health_observations (animal_id, observation_date, symptoms, notes, created_by) VALUES (?,?,?,?,?)",
+                        (a["id"], r["date"][:10], r["reason"], "Imported with treatment", uid))
+                new_id = db.execute(
+                    "INSERT INTO treatments (animal_id, health_observation_id, treatment_type, medicine_id, medicine_name, dose, "
+                    "dose_unit, route, start_date, administered_by, veterinarian, meat_withdrawal_end, milk_withdrawal_end, "
+                    "follow_up_date, result, notes, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (a["id"], obs_id, r.get("treatment_type") or None, med["id"] if med else None,
+                     None if med else (r.get("medicine") or None), r.get("dose") or None, r.get("dose_unit") or None,
+                     r.get("route") or None, r["date"][:10], r.get("given_by") or g.user["full_name"], r.get("vet") or None,
+                     meat_wd, milk_wd, r.get("follow_up_date") or None, r.get("result") or None, r.get("notes") or None, uid))
+                seen_t.add((a["id"], r["date"][:10], what.lower()))
+                db.audit(g.user, "import", "treatment", new_id, f"Imported treatment {what} for {r['species']} {a['tag_id']} on {r['date']}")
+            if r.get("follow_up_date") and targets:
+                label = f"{r['species']} {targets[0]['tag_id']}" if len(targets) == 1 else \
+                    f"{len(targets)} {r['species'].lower()}{'' if r['species'].lower() == 'sheep' else 's'}"
+                db.execute("INSERT INTO tasks (task_type, title, description, due_date, priority, created_by) VALUES (?,?,?,?,?,?)",
+                           ("follow_up", f"Follow-up after {what}: {label} ({r['date'][:10]})",
+                            f"Treatment given {r['date'][:10]}. {r.get('reason') or ''}".strip(), r["follow_up_date"], "normal", uid))
+            done += len(targets)
     else:
         for row in checked:
             if not row["ok"]:
@@ -289,7 +444,7 @@ def commit():
             db.audit(g.user, "import", "task", new_id, f"Imported task: {r['title']}")
             done += 1
     os.remove(path)
-    skipped = len(checked) - done
+    skipped = sum(1 for r in checked if not r["ok"]) if kind == "treatments" else len(checked) - done
     db.audit(g.user, "import", kind, summary=f"CSV {kind} import: {done} added, {skipped} skipped")
     flash(f"Import complete: {done} {KINDS[kind]['label'].lower()} added, {skipped} skipped.", "success")
     return redirect(url_for("records_import.form"))
