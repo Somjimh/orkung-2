@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Import Records - {{ app_name }}{% endblock %}
+{% block heading %}Import Records{% endblock %}
+{% block content %}
+<div class="tabs">
+  <a href="{{ url_for('admin.users') }}">Users</a>
+  <a href="{{ url_for('admin.settings') }}">Species &amp; breeds</a>
+  <a href="{{ url_for('admin.import_form') }}">Import animals</a>
+  <a href="{{ url_for('records_import.form') }}" class="active">Import records</a>
+  <a href="{{ url_for('admin.backup') }}">Backup</a>
+  <a href="{{ url_for('reports.audit_report') }}">Audit history</a>
+</div>
+<div class="card section">
+  <h3>How it works</h3>
+  <p class="small muted">Import in this order: <strong>1. Animals</strong>, then <strong>2. Weights</strong>, then <strong>3. Tasks / flags</strong>.
+  Each file is checked first and nothing is saved until you press Commit. Animals already on the site, weights already recorded for that date,
+  and tasks already pending are skipped, so importing the same file twice does not add anything twice. Tags are matched by species, and leading zeros
+  are ignored ('039' = '39').</p>
+</div>
+{% for key, k in kinds.items() %}
+<div class="card section">
+  <h3>{{ loop.index }}. {{ k.label }}</h3>
+  <p class="small muted">Columns: {{ k.header|join(', ') }} &middot; <a href="{{ url_for('records_import.template', kind=key) }}">Download template</a></p>
+  <form method="post" action="{{ url_for('records_import.preview') }}" enctype="multipart/form-data">
+    <input type="hidden" name="kind" value="{{ key }}">
+    <div class="field"><input type="file" name="file" accept=".csv" required></div>
+    <button class="btn" type="submit">Check file</button>
+  </form>
+</div>
+{% endfor %}
+{% endblock %}

@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Check Import - {{ app_name }}{% endblock %}
+{% block heading %}Check import: {{ label }}{% endblock %}
+{% block content %}
+<div class="card section">
+  <p><strong>{{ valid }}</strong> of <strong>{{ total }}</strong> row(s) are ready to add. The others will be skipped (reason shown in red).</p>
+  <form method="post" action="{{ url_for('records_import.commit') }}">
+    <input type="hidden" name="token" value="{{ token }}">
+    <input type="hidden" name="kind" value="{{ kind }}">
+    <button class="btn" type="submit" {{ 'disabled' if valid==0 }} data-confirm="Add {{ valid }} record(s) now?">Commit ({{ valid }} record(s))</button>
+    <a class="btn secondary" href="{{ url_for('records_import.form') }}">Cancel</a>
+  </form>
+</div>
+<div class="table-wrap">
+<table class="data">
+  <thead><tr><th>Line</th>
+  {% if kind == 'tasks' %}<th>Title</th><th>Priority</th><th>Due</th>
+  {% elif kind == 'weights' %}<th>Species</th><th>Tag</th><th>Date</th><th>Weight (kg)</th>
+  {% else %}<th>Species</th><th>Tag</th><th>Sex</th><th>Born</th><th>Mother</th><th>Status</th>{% endif %}
+  <th>Check</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+  <tr>
+    <td data-label="Line">{{ r.line }}</td>
+    {% if kind == 'tasks' %}
+    <td data-label="Title">{{ r.data.title }}</td><td data-label="Priority">{{ r.data.priority }}</td><td data-label="Due">{{ r.data.due_date }}</td>
+    {% elif kind == 'weights' %}
+    <td data-label="Species">{{ r.data.species }}</td><td data-label="Tag">{{ r.data.tag_id }}</td><td data-label="Date">{{ r.data.measured_on }}</td><td data-label="Weight">{{ r.data.weight_kg }}</td>
+    {% else %}
+    <td data-label="Species">{{ r.data.species }}</td><td data-label="Tag">{{ r.data.tag_id }}</td><td data-label="Sex">{{ r.data.sex }}</td>
+    <td data-label="Born">{{ r.data.dob or '—' }}</td><td data-label="Mother">{{ r.data.dam_tag or '—' }}</td><td data-label="Status">{{ r.data.status or 'active' }}</td>
+    {% endif %}
+    <td data-label="Check">
+      {% if r.ok %}<span class="pill green">Ready</span>{% else %}<span class="pill red">{{ r.errors|join(', ') }}</span>{% endif %}
+      {% for n in r.notes %}<span class="pill amber">{{ n }}</span>{% endfor %}
+    </td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}
