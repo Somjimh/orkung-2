@@ -237,3 +237,23 @@ def audit_report():
     header = ["Timestamp", "User", "Action", "Entity", "Entity ID", "Summary"]
     data = [(r["ts"], r["username"], r["action"], r["entity_type"], r["entity_id"], r["summary"] or "") for r in rows]
     return _out("User Activity & Audit History", header, data, "audit_history.csv")
+
+
+@bp.route("/tasks-report")
+@auth.login_required
+def tasks_report():
+    status = request.args.get("status", "pending")
+    where, args = ("1=1", ()) if status == "all" else ("t.status=?", (status,))
+    rows = db.query(
+        "SELECT t.*, u.full_name AS assignee FROM tasks t LEFT JOIN users u ON u.id=t.assigned_to "
+        f"WHERE {where} ORDER BY CASE t.priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 ELSE 2 END, t.due_date, t.title",
+        args)
+    today = db.today_str()
+    header = ["Priority", "Due", "Task", "Details", "Status", "Assigned to", "Done"]
+    data = [(r["priority"].capitalize(),
+             r["due_date"] + (" (overdue)" if r["status"] == "pending" and r["due_date"] < today else ""),
+             r["title"], r["description"] or "", r["status"].capitalize(), r["assignee"] or "", "")
+            for r in rows]
+    label = "all tasks" if status == "all" else f"{status} tasks"
+    return _out("Tasks & Alerts", header, data, "tasks_alerts.csv",
+                description=f"Showing {label}, most urgent first. The 'Done' column is left blank for ticking on a printed copy.")

@@ -18,6 +18,7 @@
     ('reports.group_membership', 'Group membership', 'Historical and current group assignments.'),
     ('reports.by_site', 'Animals by site', 'Every animal grouped by current site.'),
     ('reports.incomplete', 'Incomplete records', 'Active animals missing key fields.'),
+    ('reports.tasks_report', 'Tasks & alerts', 'Open tasks and flags, most urgent first, ready to print.'),
   ] %}
   {% for endpoint, title, desc in reports %}
   <a class="card link" href="{{ url_for(endpoint) }}" style="display:block;">
