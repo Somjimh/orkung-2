@@ -6,9 +6,9 @@
 <div class="kpi-row grid cols-4 section">
   <div class="stat-card"><div class="stat-label">On hand</div><div class="stat-value">{{ '%g'|format(on_hand) }} {{ it.unit }}</div>
     <div class="stat-sub">{{ '%.1f'|format(on_hand / it.pack_size) }} packs of {{ '%g'|format(it.pack_size) }} {{ it.unit }}</div></div>
-  <div class="stat-card"><div class="stat-label">Price per pack (KES)</div><div class="stat-value">{{ '{:,.0f}'.format(it.price_per_pack) if it.price_per_pack else '—' }}</div>
+  <div class="stat-card"><div class="stat-label">Latest price per pack (KES)</div><div class="stat-value">{{ '{:,.0f}'.format(it.price_per_pack) if it.price_per_pack else '—' }}</div>
     {% if cost %}<div class="stat-sub">KES {{ '%.2f'|format(cost) }} per {{ it.unit }}</div>{% endif %}</div>
-  <div class="stat-card"><div class="stat-label">Value (KES)</div><div class="stat-value">{{ '{:,.0f}'.format(on_hand * cost) if cost and on_hand > 0 else '—' }}</div></div>
+  <div class="stat-card"><div class="stat-label">Value (KES)</div><div class="stat-value">{{ '{:,.0f}'.format(value) if value else '—' }}</div></div>
   <div class="stat-card"><div class="stat-label">Reorder below</div><div class="stat-value">{{ '%g'|format(it.reorder_level / it.pack_size) if it.reorder_level else '—' }}</div><div class="stat-sub">packs</div></div>
 </div>
 
@@ -16,13 +16,14 @@
   <h3>Batches on the shelf</h3>
   {% if batches %}
   <div class="table-wrap"><table class="data">
-    <thead><tr><th>Batch</th><th>Expiry</th><th>Location</th><th>Condition</th><th>Quantity</th></tr></thead>
+    <thead><tr><th>Batch</th><th>Expiry</th><th>Location</th><th>Condition</th><th>Price / pack (KES)</th><th>Quantity</th></tr></thead>
     <tbody>{% for b in batches %}
     <tr>
       <td data-label="Batch">{{ b.batch_no or '—' }}</td>
       <td data-label="Expiry">{{ b.expiry or '—' }}{% if b.expiry and b.expiry < today and b.qty > 0 %} <span class="pill red">Expired</span>{% endif %}</td>
       <td data-label="Location">{{ b.location or '—' }}</td>
       <td data-label="Condition">{{ b.condition or '—' }}</td>
+      <td data-label="Price / pack">{{ '{:,.0f}'.format(b.price_per_pack) if b.price_per_pack else ('{:,.0f}'.format(it.price_per_pack) ~ ' (item)' if it.price_per_pack else '—') }}</td>
       <td data-label="Quantity">{{ '%g'|format(b.qty) }} {{ it.unit }}{% if b.qty < 0 %} <span class="pill red">count needed</span>{% endif %}</td>
     </tr>{% endfor %}</tbody>
   </table></div>

@@ -81,9 +81,11 @@ def parse_expiry(text):
     return None
 
 
-def unit_cost(item):
-    if item["price_per_pack"] and item["pack_size"]:
-        return item["price_per_pack"] / item["pack_size"]
+def unit_cost(item, batch=None):
+    """KES per base unit: the batch's own price if it has one, else the item's price."""
+    price = (batch["price_per_pack"] if batch is not None and batch["price_per_pack"] else None) or item["price_per_pack"]
+    if price and item["pack_size"]:
+        return price / item["pack_size"]
     return None
 
 
@@ -97,16 +99,19 @@ def take_out(item, qty, when, move_type="used", treatment_id=None, notes=None, u
     """Remove qty (base units) from an item's batches, earliest expiry first."""
     remaining = qty
     cost = unit_cost(item)
+    total_cost = 0.0
     batches = db.query("SELECT * FROM stock_batches WHERE item_id=? AND qty>0 "
                        "ORDER BY CASE WHEN expiry IS NULL THEN 1 ELSE 0 END, expiry, id", (item["id"],))
     for b in batches:
         if remaining <= 0:
             break
         part = min(b["qty"], remaining)
+        bcost = unit_cost(item, b)
         db.execute("UPDATE stock_batches SET qty=qty-? WHERE id=?", (part, b["id"]))
         db.execute("INSERT INTO stock_movements (item_id, batch_id, move_date, move_type, qty, unit_cost, treatment_id, notes, created_by) "
-                   "VALUES (?,?,?,?,?,?,?,?,?)", (item["id"], b["id"], when, move_type, -part, cost, treatment_id, notes,
+                   "VALUES (?,?,?,?,?,?,?,?,?)", (item["id"], b["id"], when, move_type, -part, bcost, treatment_id, notes,
                                                    user["id"] if user else None))
+        total_cost += part * (bcost or 0)
         remaining -= part
     if remaining > 1e-9:  # not enough on the shelf: record it so the shortfall shows
         last = db.query("SELECT id FROM stock_batches WHERE item_id=? ORDER BY id DESC LIMIT 1", (item["id"],), one=True)
@@ -116,7 +121,8 @@ def take_out(item, qty, when, move_type="used", treatment_id=None, notes=None, u
                    "VALUES (?,?,?,?,?,?,?,?,?)", (item["id"], last["id"] if last else None, when, move_type, -remaining, cost,
                                                    treatment_id, ((notes or "") + " | more used than was in stock: please count").strip(" |"),
                                                    user["id"] if user else None))
-    return qty * cost if cost else None
+        total_cost += remaining * (cost or 0)
+    return total_cost or None
 
 
 def deduct_for_treatment(treatment_id, medicine_name, dose, dose_unit, when, user):
@@ -161,12 +167,12 @@ def _summary():
             flags.append(("amber", "Expires soon"))
         if any((b["condition"] or "").lower().startswith(("damag", "expir")) for b in live):
             flags.append(("red", "Damaged"))
-        if cost is None:
+        if cost is None and not any(b["price_per_pack"] for b in bs):
             flags.append(("gray", "No price"))
         used90 = db.query("SELECT -SUM(qty) s FROM stock_movements WHERE item_id=? AND move_type='used' "
                           "AND date(move_date) >= date('now','-90 day')", (it["id"],), one=True)["s"] or 0
         out.append(dict(item=it, on_hand=on_hand, packs=(on_hand / it["pack_size"]) if it["pack_size"] else None,
-                        value=(on_hand * cost) if cost is not None and on_hand > 0 else None, first_exp=first_exp,
+                        value=(sum(b["qty"] * (unit_cost(it, b) or 0) for b in live) if live and any(unit_cost(it, b) for b in live) else None), first_exp=first_exp,
                         flags=flags, used90=used90, batches=len(live)))
     return out
 
@@ -236,6 +242,7 @@ def item(item_id):
     medicines = db.query("SELECT id, name FROM medicines ORDER BY name")
     return render_template("stock_item.html", it=it, batches=batches, moves=moves, medicines=medicines,
                            cost=unit_cost(it), on_hand=sum(b["qty"] for b in batches),
+                           value=sum(b["qty"] * (unit_cost(it, b) or 0) for b in batches if b["qty"] > 0),
                            can_edit=g.user["role"] in STOCK_STAFF, can_manage=g.user["role"] in auth.MANAGEMENT,
                            today=db.today_str())
 
@@ -300,11 +307,12 @@ def move(item_id):
         if price:
             db.execute("UPDATE stock_items SET price_per_pack=? WHERE id=?", (price, item_id))
             it = db.query("SELECT * FROM stock_items WHERE id=?", (item_id,), one=True)
-        bid = db.execute("INSERT INTO stock_batches (item_id, batch_no, expiry, location, condition, qty) VALUES (?,?,?,?,?,?)",
+        bid = db.execute("INSERT INTO stock_batches (item_id, batch_no, expiry, location, condition, qty, price_per_pack) VALUES (?,?,?,?,?,?,?)",
                          (item_id, request.form.get("batch_no") or None, parse_expiry(request.form.get("expiry")),
-                          request.form.get("location") or None, "Good", qty))
+                          request.form.get("location") or None, "Good", qty, price or it["price_per_pack"]))
+        b = db.query("SELECT * FROM stock_batches WHERE id=?", (bid,), one=True)
         db.execute("INSERT INTO stock_movements (item_id, batch_id, move_date, move_type, qty, unit_cost, notes, created_by) VALUES (?,?,?,?,?,?,?,?)",
-                   (item_id, bid, when, "purchase", qty, unit_cost(it), notes or request.form.get("supplier"), g.user["id"]))
+                   (item_id, bid, when, "purchase", qty, unit_cost(it, b), notes or request.form.get("supplier"), g.user["id"]))
         db.audit(g.user, "create", "stock_movement", item_id, f"Purchase of {qty:g} {it['unit']} {it['name']}")
         flash(f"Purchase recorded: {qty:g} {it['unit']}.", "success")
     elif kind in ("used", "disposed"):
@@ -323,7 +331,7 @@ def move(item_id):
         diff = qty - b["qty"]
         db.execute("UPDATE stock_batches SET qty=? WHERE id=?", (qty, bid))
         db.execute("INSERT INTO stock_movements (item_id, batch_id, move_date, move_type, qty, unit_cost, notes, created_by) VALUES (?,?,?,?,?,?,?,?)",
-                   (item_id, bid, when, "adjust", diff, unit_cost(it), (notes or "") + f" | counted {qty:g} {it['unit']}", g.user["id"]))
+                   (item_id, bid, when, "adjust", diff, unit_cost(it, b), (notes or "") + f" | counted {qty:g} {it['unit']}", g.user["id"]))
         db.audit(g.user, "update", "stock_batch", bid, f"Count {it['name']} batch {b['batch_no']}: {b['qty']:g} -> {qty:g}")
         flash(f"Count saved. Difference {diff:+g} {it['unit']}.", "success")
     return redirect(url_for("stock.item", item_id=item_id))

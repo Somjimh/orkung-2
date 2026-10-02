@@ -469,16 +469,19 @@ def commit():
             when = r["count_date"][:10]
             if b:
                 diff = qty - b["qty"]
-                db.execute("UPDATE stock_batches SET qty=?, expiry=?, condition=? WHERE id=?",
-                           (qty, st.parse_expiry(r.get("expiry")) or b["expiry"], r.get("condition") or b["condition"], b["id"]))
+                db.execute("UPDATE stock_batches SET qty=?, expiry=?, condition=?, price_per_pack=? WHERE id=?",
+                           (qty, st.parse_expiry(r.get("expiry")) or b["expiry"], r.get("condition") or b["condition"],
+                            price if price is not None else b["price_per_pack"], b["id"]))
+                b = db.query("SELECT * FROM stock_batches WHERE id=?", (b["id"],), one=True)
                 db.execute("INSERT INTO stock_movements (item_id, batch_id, move_date, move_type, qty, unit_cost, notes, created_by) VALUES (?,?,?,?,?,?,?,?)",
-                           (it["id"], b["id"], when, "adjust", diff, st.unit_cost(it), f"Stock count: {qty:g} {it['unit']}", uid))
+                           (it["id"], b["id"], when, "adjust", diff, st.unit_cost(it, b), f"Stock count: {qty:g} {it['unit']}", uid))
             else:
-                bid = db.execute("INSERT INTO stock_batches (item_id, batch_no, expiry, location, condition, qty) VALUES (?,?,?,?,?,?)",
+                bid = db.execute("INSERT INTO stock_batches (item_id, batch_no, expiry, location, condition, qty, price_per_pack) VALUES (?,?,?,?,?,?,?)",
                                  (it["id"], r.get("batch_no") or None, st.parse_expiry(r.get("expiry")), r.get("location") or None,
-                                  r.get("condition") or None, qty))
+                                  r.get("condition") or None, qty, price))
+                b = db.query("SELECT * FROM stock_batches WHERE id=?", (bid,), one=True)
                 db.execute("INSERT INTO stock_movements (item_id, batch_id, move_date, move_type, qty, unit_cost, notes, created_by) VALUES (?,?,?,?,?,?,?,?)",
-                           (it["id"], bid, when, "count", qty, st.unit_cost(it), r.get("notes") or "Opening stock count", uid))
+                           (it["id"], bid, when, "count", qty, st.unit_cost(it, b), r.get("notes") or "Opening stock count", uid))
             db.audit(g.user, "import", "stock_item", it["id"], f"Stock count {name}: {qty:g} {it['unit']}")
             done += 1
     elif kind == "treatments":

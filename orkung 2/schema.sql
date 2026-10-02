@@ -300,6 +300,7 @@ CREATE TABLE IF NOT EXISTS stock_batches (
     location TEXT,
     condition TEXT,
     qty REAL NOT NULL DEFAULT 0,                    -- base units on hand
+    price_per_pack REAL,                            -- KES paid per pack for this batch (falls back to the item price)
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_batches_item ON stock_batches(item_id);

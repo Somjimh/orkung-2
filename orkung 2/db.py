@@ -41,6 +41,10 @@ def init_db(app):
     conn.execute("PRAGMA foreign_keys = ON")
     with app.open_resource("schema.sql") as f:
         conn.executescript(f.read().decode("utf8"))
+    # small in-place upgrades for databases created by an earlier version
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(stock_batches)")}
+    if cols and "price_per_pack" not in cols:
+        conn.execute("ALTER TABLE stock_batches ADD COLUMN price_per_pack REAL")
     conn.commit()
     conn.close()
     return fresh
