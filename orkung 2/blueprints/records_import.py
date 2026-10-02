@@ -29,6 +29,11 @@ KINDS = {
         label="Weights",
         header=["species", "tag_id", "measured_on", "weight_kg", "notes"],
         example=[("Goat", "039", "2026-09-12", "31.5", "From weights book")]),
+    "stock": dict(
+        label="Medicine stock count",
+        header=["count_date", "item", "category", "location", "pack_size", "full_packs", "loose_qty", "batch_no", "expiry",
+                "condition", "price_per_pack", "reorder_packs", "notes"],
+        example=[("2026-10-02", "Tylosin", "medicine", "Shelf", "100 ml", "1", "", "260104", "12/28", "Good", "850", "1", "")]),
     "treatments": dict(
         label="Treatments",
         header=["date", "species", "tag_id", "treatment_type", "medicine", "dose", "dose_unit", "route", "reason",
@@ -85,7 +90,11 @@ ALIASES = {
     "givenby": "given_by", "vet": "vet", "veterinarian": "vet", "withdrawaldays": "withdrawal_days",
     "meatwithdrawaldays": "withdrawal_days", "followupdate": "follow_up_date", "followup": "follow_up_date",
     "date": "date", "datetreated": "date", "weightkg": "weight_kg", "measuredon": "measured_on",
-    "duedate": "due_date", "tasktype": "task_type", "damtag": "dam_tag", "mothertag": "dam_tag",
+    "duedate": "due_date", "itemname": "item", "itemnameasonlabel": "item", "name": "item",
+    "locationshelf": "location", "packsizeunit": "pack_size", "packsize": "pack_size", "fullpacks": "full_packs",
+    "looseqtyunit": "loose_qty", "looseqty": "loose_qty", "batchno": "batch_no", "batch": "batch_no", "expirydate": "expiry",
+    "conditiongooddamagedexpired": "condition", "priceperpack": "price_per_pack", "priceperpackkes": "price_per_pack",
+    "reorderpacks": "reorder_packs", "reorderlevelpacks": "reorder_packs", "countdate": "count_date", "tasktype": "task_type", "damtag": "dam_tag", "mothertag": "dam_tag",
     "birthweight": "birth_weight", "statusdate": "status_date", "tagid": "tag_id",
 }
 
@@ -110,7 +119,7 @@ def _xlsx_to_csv(src, dest, kind):
     """Read the first sheet whose header row has the columns we need; write it out as CSV."""
     from openpyxl import load_workbook
     wb = load_workbook(src, data_only=True, read_only=True)
-    need = {"tag_id"} if kind != "tasks" else {"title"}
+    need = {"title"} if kind == "tasks" else {"item"} if kind == "stock" else {"tag_id"}
     for ws in wb.worksheets:
         rows = list(ws.iter_rows(values_only=True))
         for hi, row in enumerate(rows[:15]):
@@ -130,6 +139,11 @@ def _xlsx_to_csv(src, dest, kind):
 def _read(path):
     with open(path, newline="", encoding="utf-8-sig") as f:
         return [{_key(k): (v or "").strip() for k, v in r.items() if k} for r in csv.DictReader(f)]
+
+
+def _stock_batch(item, r):
+    return db.query("SELECT * FROM stock_batches WHERE item_id=? AND ifnull(lower(batch_no),'')=? AND ifnull(lower(location),'')=?",
+                    (item["id"], (r.get("batch_no") or "").strip().lower(), (r.get("location") or "").strip().lower()), one=True)
 
 
 def _treatment_targets(sid, tag, by_key):
@@ -202,6 +216,45 @@ def _check(kind, rows):
                 prev = last.get(a["id"])
                 if prev and abs(wt - prev) / prev * 100 > current_app.config["WEIGHT_CHANGE_WARN_PCT"]:
                     notes.append("big change from last weight (will be flagged)")
+            out.append(dict(line=i, data=r, errors=errs, notes=notes))
+    elif kind == "stock":
+        from blueprints import stock as st
+        seen = set()
+        for i, r in enumerate(rows, start=2):
+            errs, notes = [], []
+            name = (r.get("item") or "").strip()
+            size, unit = st.parse_amount(r.get("pack_size"))
+            size_b, base = st.to_base(size, unit)
+            if not name:
+                errs.append("missing item name")
+            if not size_b:
+                errs.append("pack size needs a number and unit, e.g. 100 ml")
+            if not _valid_date(r.get("count_date")):
+                errs.append("count_date must be a date")
+            full = _f(r.get("full_packs")) or 0
+            loose_amt, loose_unit = st.parse_amount(r.get("loose_qty"))
+            loose_b, lbase = st.to_base(loose_amt, loose_unit or unit) if loose_amt else (0, base)
+            if loose_amt and lbase != base:
+                errs.append("loose amount unit does not match pack unit")
+            it = st.find_item(name) if name else None
+            if it and base and it["unit"] != base:
+                errs.append(f"item already exists in {it['unit']}, this row is in {base}")
+            if r.get("expiry") and not st.parse_expiry(r["expiry"]):
+                errs.append("expiry not understood (use MM/YY)")
+            key = (name.lower(), (r.get("batch_no") or "").strip().lower(), (r.get("location") or "").strip().lower())
+            if key in seen:
+                errs.append("same item, batch and location twice in this file")
+            if not errs:
+                seen.add(key)
+                b = _stock_batch(it, r) if it else None
+                if b and db.query("SELECT 1 FROM stock_movements WHERE batch_id=? AND move_type IN ('count','adjust') AND move_date=?",
+                                  (b["id"], r["count_date"][:10]), one=True):
+                    errs.append("already counted on this date (skipped)")
+                else:
+                    qty = full * size_b + (loose_b or 0)
+                    notes.append(f"{qty:g} {base}" + (" (new item)" if not it else ""))
+                    if not r.get("price_per_pack") and not (it and it["price_per_pack"]):
+                        notes.append("no price yet")
             out.append(dict(line=i, data=r, errors=errs, notes=notes))
     elif kind == "treatments":
         meds = {m["name"].strip().lower() for m in db.query("SELECT name FROM medicines")}
@@ -383,10 +436,56 @@ def commit():
                 "VALUES (?,?,?,?,?,?,?)", (a["id"], wt, r["measured_on"][:10], "scale", r.get("notes") or None, flagged, uid))
             db.audit(g.user, "import", "weight_record", new_id, f"Imported weight {wt} kg for {r['tag_id']} on {r['measured_on']}")
             done += 1
+    elif kind == "stock":
+        from blueprints import stock as st
+        for row in checked:
+            if not row["ok"]:
+                continue
+            r = row["data"]
+            name = r["item"].strip()
+            size, unit = st.parse_amount(r.get("pack_size"))
+            size_b, base = st.to_base(size, unit)
+            price = _f(r.get("price_per_pack"))
+            reorder = _f(r.get("reorder_packs"))
+            it = st.find_item(name)
+            if not it:
+                iid = db.execute("INSERT INTO stock_items (name, category, pack_size, unit, price_per_pack, reorder_level, notes) VALUES (?,?,?,?,?,?,?)",
+                                 (name, (r.get("category") or "medicine").lower(), size_b, base, price,
+                                  (reorder if reorder is not None else 1) * size_b, None))
+                med = db.query("SELECT id FROM medicines WHERE lower(name)=lower(?)", (name,), one=True)
+                if med:
+                    db.execute("UPDATE stock_items SET medicine_id=? WHERE id=?", (med["id"], iid))
+                it = db.query("SELECT * FROM stock_items WHERE id=?", (iid,), one=True)
+            else:
+                if price is not None:
+                    db.execute("UPDATE stock_items SET price_per_pack=? WHERE id=?", (price, it["id"]))
+                if reorder is not None:
+                    db.execute("UPDATE stock_items SET reorder_level=? WHERE id=?", (reorder * it["pack_size"], it["id"]))
+                it = db.query("SELECT * FROM stock_items WHERE id=?", (it["id"],), one=True)
+            loose_amt, loose_unit = st.parse_amount(r.get("loose_qty"))
+            loose_b = st.to_base(loose_amt, loose_unit or unit)[0] if loose_amt else 0
+            qty = (_f(r.get("full_packs")) or 0) * it["pack_size"] + (loose_b or 0)
+            b = _stock_batch(it, r)
+            when = r["count_date"][:10]
+            if b:
+                diff = qty - b["qty"]
+                db.execute("UPDATE stock_batches SET qty=?, expiry=?, condition=? WHERE id=?",
+                           (qty, st.parse_expiry(r.get("expiry")) or b["expiry"], r.get("condition") or b["condition"], b["id"]))
+                db.execute("INSERT INTO stock_movements (item_id, batch_id, move_date, move_type, qty, unit_cost, notes, created_by) VALUES (?,?,?,?,?,?,?,?)",
+                           (it["id"], b["id"], when, "adjust", diff, st.unit_cost(it), f"Stock count: {qty:g} {it['unit']}", uid))
+            else:
+                bid = db.execute("INSERT INTO stock_batches (item_id, batch_no, expiry, location, condition, qty) VALUES (?,?,?,?,?,?)",
+                                 (it["id"], r.get("batch_no") or None, st.parse_expiry(r.get("expiry")), r.get("location") or None,
+                                  r.get("condition") or None, qty))
+                db.execute("INSERT INTO stock_movements (item_id, batch_id, move_date, move_type, qty, unit_cost, notes, created_by) VALUES (?,?,?,?,?,?,?,?)",
+                           (it["id"], bid, when, "count", qty, st.unit_cost(it), r.get("notes") or "Opening stock count", uid))
+            db.audit(g.user, "import", "stock_item", it["id"], f"Stock count {name}: {qty:g} {it['unit']}")
+            done += 1
     elif kind == "treatments":
         from datetime import timedelta
         species, by_key = _lookups()
         meds = {m["name"].strip().lower(): m for m in db.query("SELECT * FROM medicines")}
+        stock_msgs = set()
         seen_t = {(t["animal_id"], (t["start_date"] or "")[:10], (t["medicine_name"] or t["mname"] or t["treatment_type"] or "").lower())
                 for t in db.query("SELECT t.animal_id, t.start_date, t.medicine_name, t.treatment_type, m.name AS mname "
                                   "FROM treatments t LEFT JOIN medicines m ON m.id=t.medicine_id")}
@@ -424,6 +523,11 @@ def commit():
                      r.get("route") or None, r["date"][:10], r.get("given_by") or g.user["full_name"], r.get("vet") or None,
                      meat_wd, milk_wd, r.get("follow_up_date") or None, r.get("result") or None, r.get("notes") or None, uid))
                 seen_t.add((a["id"], r["date"][:10], what.lower()))
+                if r.get("medicine"):
+                    from blueprints.stock import deduct_for_treatment
+                    msg = deduct_for_treatment(new_id, r["medicine"], r.get("dose"), r.get("dose_unit"), r["date"][:10], g.user)
+                    if msg:
+                        stock_msgs.add(msg)
                 db.audit(g.user, "import", "treatment", new_id, f"Imported treatment {what} for {r['species']} {a['tag_id']} on {r['date']}")
             if r.get("follow_up_date") and targets:
                 label = f"{r['species']} {targets[0]['tag_id']}" if len(targets) == 1 else \
@@ -432,6 +536,8 @@ def commit():
                            ("follow_up", f"Follow-up after {what}: {label} ({r['date'][:10]})",
                             f"Treatment given {r['date'][:10]}. {r.get('reason') or ''}".strip(), r["follow_up_date"], "normal", uid))
             done += len(targets)
+        for msg in sorted(stock_msgs):
+            flash(msg, "error")
     else:
         for row in checked:
             if not row["ok"]:

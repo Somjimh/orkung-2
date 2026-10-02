@@ -274,3 +274,47 @@ CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT
 );
+
+-- Medicine & supplies stock ---------------------------------------------------
+-- Quantities are kept in a base unit per item (ml, g or pcs). Litres are stored
+-- as ml and kilograms as g. Cost per base unit = price_per_pack / pack_size.
+CREATE TABLE IF NOT EXISTS stock_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    category TEXT NOT NULL DEFAULT 'medicine',      -- medicine / vaccine / supply
+    pack_size REAL NOT NULL DEFAULT 1,
+    unit TEXT NOT NULL DEFAULT 'ml',                -- ml / g / pcs
+    price_per_pack REAL,                            -- KES
+    reorder_level REAL NOT NULL DEFAULT 0,          -- in base units
+    medicine_id INTEGER REFERENCES medicines(id),
+    notes TEXT,
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS stock_batches (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    item_id INTEGER NOT NULL REFERENCES stock_items(id),
+    batch_no TEXT,
+    expiry TEXT,                                    -- YYYY-MM-DD (end of month if only month known)
+    location TEXT,
+    condition TEXT,
+    qty REAL NOT NULL DEFAULT 0,                    -- base units on hand
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_batches_item ON stock_batches(item_id);
+
+CREATE TABLE IF NOT EXISTS stock_movements (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    item_id INTEGER NOT NULL REFERENCES stock_items(id),
+    batch_id INTEGER REFERENCES stock_batches(id),
+    move_date TEXT NOT NULL,
+    move_type TEXT NOT NULL CHECK(move_type IN ('count','purchase','used','adjust','disposed')),
+    qty REAL NOT NULL,                              -- signed base units (+ in, - out); for 'count' the counted amount
+    unit_cost REAL,                                 -- KES per base unit at the time
+    treatment_id INTEGER REFERENCES treatments(id),
+    notes TEXT,
+    created_by INTEGER REFERENCES users(id),
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_moves_item ON stock_movements(item_id, move_date);

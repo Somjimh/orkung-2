@@ -18,6 +18,7 @@
   {% if 'breeding' in nav %}<a href="{{ url_for('breeding.index') }}" class="{{ 'active' if request.endpoint=='breeding.index' }}"><span class="ic">&#9829;</span> Breeding</a>{% endif %}
   {% if 'births' in nav %}<a href="{{ url_for('breeding.births') }}" class="{{ 'active' if request.endpoint=='breeding.births' }}"><span class="ic">&#128119;</span> Births</a>{% endif %}
   {% if 'health' in nav %}<a href="{{ url_for('health.index') }}" class="{{ 'active' if request.endpoint and request.endpoint.startswith('health.') }}"><span class="ic">&#10010;</span> Health &amp; Treatments</a>{% endif %}
+  {% if 'health' in nav %}<a href="{{ url_for('stock.index') }}" class="{{ 'active' if request.endpoint and request.endpoint.startswith('stock.') }}"><span class="ic">&#128138;</span> Medicine Stock</a>{% endif %}
   {% if 'groups' in nav %}<a href="{{ url_for('groups.index') }}" class="{{ 'active' if request.endpoint=='groups.index' }}"><span class="ic">&#9635;</span> Groups</a>{% endif %}
   {% if 'movements' in nav %}<a href="{{ url_for('groups.movements') }}" class="{{ 'active' if request.endpoint=='groups.movements' }}"><span class="ic">&#8646;</span> Movements</a>{% endif %}
   {% if 'tasks' in nav %}<a href="{{ url_for('tasks.index') }}" class="{{ 'active' if request.endpoint and request.endpoint.startswith('tasks.') }}"><span class="ic">&#9745;</span> Tasks &amp; Alerts {% if pending_tasks %}<span class="pill amber" style="margin-left:auto">{{ pending_tasks }}</span>{% endif %}</a>{% endif %}

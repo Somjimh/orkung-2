@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}{{ it.name }} - Medicine Stock - {{ app_name }}{% endblock %}
+{% block heading %}{{ it.name }}{% endblock %}
+{% block topbar_actions %}<a class="btn secondary" href="{{ url_for('stock.index') }}">All stock</a>{% endblock %}
+{% block content %}
+<div class="kpi-row grid cols-4 section">
+  <div class="stat-card"><div class="stat-label">On hand</div><div class="stat-value">{{ '%g'|format(on_hand) }} {{ it.unit }}</div>
+    <div class="stat-sub">{{ '%.1f'|format(on_hand / it.pack_size) }} packs of {{ '%g'|format(it.pack_size) }} {{ it.unit }}</div></div>
+  <div class="stat-card"><div class="stat-label">Price per pack (KES)</div><div class="stat-value">{{ '{:,.0f}'.format(it.price_per_pack) if it.price_per_pack else '—' }}</div>
+    {% if cost %}<div class="stat-sub">KES {{ '%.2f'|format(cost) }} per {{ it.unit }}</div>{% endif %}</div>
+  <div class="stat-card"><div class="stat-label">Value (KES)</div><div class="stat-value">{{ '{:,.0f}'.format(on_hand * cost) if cost and on_hand > 0 else '—' }}</div></div>
+  <div class="stat-card"><div class="stat-label">Reorder below</div><div class="stat-value">{{ '%g'|format(it.reorder_level / it.pack_size) if it.reorder_level else '—' }}</div><div class="stat-sub">packs</div></div>
+</div>
+
+<div class="card section">
+  <h3>Batches on the shelf</h3>
+  {% if batches %}
+  <div class="table-wrap"><table class="data">
+    <thead><tr><th>Batch</th><th>Expiry</th><th>Location</th><th>Condition</th><th>Quantity</th></tr></thead>
+    <tbody>{% for b in batches %}
+    <tr>
+      <td data-label="Batch">{{ b.batch_no or '—' }}</td>
+      <td data-label="Expiry">{{ b.expiry or '—' }}{% if b.expiry and b.expiry < today and b.qty > 0 %} <span class="pill red">Expired</span>{% endif %}</td>
+      <td data-label="Location">{{ b.location or '—' }}</td>
+      <td data-label="Condition">{{ b.condition or '—' }}</td>
+      <td data-label="Quantity">{{ '%g'|format(b.qty) }} {{ it.unit }}{% if b.qty < 0 %} <span class="pill red">count needed</span>{% endif %}</td>
+    </tr>{% endfor %}</tbody>
+  </table></div>
+  {% else %}<p class="muted">No batches yet.</p>{% endif %}
+</div>
+
+{% if can_edit %}
+<div class="grid cols-2 section">
+  <div class="card">
+    <h3>Record a purchase</h3>
+    <form method="post" action="{{ url_for('stock.move', item_id=it.id) }}" class="form-grid">
+      <input type="hidden" name="kind" value="purchase">
+      <div class="field"><label>Date</label><input type="date" name="move_date" value="{{ today }}"></div>
+      <div class="field"><label>Packs received</label><input type="number" step="0.01" name="packs"></div>
+      <div class="field"><label>Price per pack (KES)</label><input type="number" step="0.01" name="price_per_pack" value="{{ it.price_per_pack or '' }}"></div>
+      <div class="field"><label>Batch no.</label><input type="text" name="batch_no"></div>
+      <div class="field"><label>Expiry (MM/YY)</label><input type="text" name="expiry" placeholder="05/28"></div>
+      <div class="field"><label>Location</label><input type="text" name="location" placeholder="Shelf / House"></div>
+      <div class="field" style="grid-column:1/-1;"><label>Supplier / notes</label><input type="text" name="supplier"></div>
+      <div><button class="btn" type="submit">Save purchase</button></div>
+    </form>
+  </div>
+  <div class="card">
+    <h3>Use, dispose or count</h3>
+    <form method="post" action="{{ url_for('stock.move', item_id=it.id) }}" class="form-grid">
+      <div class="field"><label>What</label><select name="kind">
+        <option value="used">Used (not through a treatment record)</option>
+        <option value="disposed">Disposed (expired / damaged)</option>
+        <option value="count">Count: set a batch to what is on the shelf</option></select></div>
+      <div class="field"><label>Date</label><input type="date" name="move_date" value="{{ today }}"></div>
+      <div class="field"><label>Batch (for a count)</label><select name="batch_id"><option value="">—</option>{% for b in batches %}<option value="{{ b.id }}">{{ b.batch_no or 'no batch' }} · {{ b.expiry or 'no expiry' }} · {{ '%g'|format(b.qty) }} {{ it.unit }}</option>{% endfor %}</select></div>
+      <div class="field"><label>Full packs</label><input type="number" step="0.01" name="packs"></div>
+      <div class="field"><label>Loose amount ({{ it.unit }})</label><input type="number" step="0.01" name="loose"></div>
+      <div class="field" style="grid-column:1/-1;"><label>Notes</label><input type="text" name="notes"></div>
+      <div><button class="btn" type="submit">Save</button></div>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+{% if can_manage %}
+<div class="card section">
+  <h3>Item settings</h3>
+  <form method="post" action="{{ url_for('stock.edit_item', item_id=it.id) }}" class="form-grid">
+    <div class="field"><label>Price per pack (KES)</label><input type="number" step="0.01" name="price_per_pack" value="{{ it.price_per_pack or '' }}"></div>
+    <div class="field"><label>Reorder when below (packs)</label><input type="number" step="0.1" name="reorder_packs" value="{{ '%g'|format(it.reorder_level / it.pack_size) if it.reorder_level else '' }}"></div>
+    <div class="field"><label>Category</label><select name="category">{% for c in ['medicine','vaccine','supply'] %}<option value="{{ c }}" {{ 'selected' if it.category==c }}>{{ c|capitalize }}</option>{% endfor %}</select></div>
+    <div class="field"><label>Medicine catalogue entry (for withdrawal days)</label><select name="medicine_id"><option value="">—</option>{% for m in medicines %}<option value="{{ m.id }}" {{ 'selected' if it.medicine_id==m.id }}>{{ m.name }}</option>{% endfor %}</select></div>
+    <div class="field" style="grid-column:1/-1;"><label>Notes</label><input type="text" name="notes" value="{{ it.notes or '' }}"></div>
+    <div><button class="btn" type="submit">Save settings</button></div>
+  </form>
+</div>
+{% endif %}
+
+<div class="card section">
+  <h3>History</h3>
+  {% if moves %}
+  <div class="table-wrap"><table class="data">
+    <thead><tr><th>Date</th><th>Type</th><th>Quantity</th><th>Cost (KES)</th><th>Batch</th><th>Animal</th><th>Notes</th><th>By</th></tr></thead>
+    <tbody>{% for m in moves %}
+    <tr>
+      <td data-label="Date">{{ m.move_date[:10] }}</td>
+      <td data-label="Type">{{ m.move_type|capitalize }}</td>
+      <td data-label="Quantity">{{ '%+g'|format(m.qty) if m.move_type != 'count' else '%g'|format(m.qty) }} {{ it.unit }}</td>
+      <td data-label="Cost">{{ '{:,.0f}'.format((m.qty|abs) * m.unit_cost) if m.unit_cost else '—' }}</td>
+      <td data-label="Batch">{{ m.batch_no or '—' }}</td>
+      <td data-label="Animal">{{ (m.species ~ ' ' ~ m.tag_id) if m.tag_id else '—' }}</td>
+      <td data-label="Notes">{{ m.notes or '' }}</td>
+      <td data-label="By">{{ m.full_name or '' }}</td>
+    </tr>{% endfor %}</tbody>
+  </table></div>
+  {% else %}<p class="muted">Nothing recorded yet.</p>{% endif %}
+</div>
+{% endblock %}

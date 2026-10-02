@@ -89,6 +89,15 @@ def add_treatment():
     a = db.query("SELECT record_no FROM animals WHERE id=?", (animal_id,), one=True)
     db.audit(g.user, "create", "treatment", new_id, f"Treatment recorded for {a['record_no']}")
 
+    from blueprints.stock import deduct_for_treatment
+    med_name = request.form.get("medicine_name")
+    if medicine_id and not med_name:
+        m = db.query("SELECT name FROM medicines WHERE id=?", (medicine_id,), one=True)
+        med_name = m["name"] if m else None
+    stock_msg = deduct_for_treatment(new_id, med_name, request.form.get("dose"), request.form.get("dose_unit"), start_date, g.user)
+    if stock_msg:
+        flash(stock_msg, "error")
+
     follow_up = request.form.get("follow_up_date")
     if follow_up:
         db.execute("INSERT INTO tasks (task_type, title, description, related_entity_type, related_entity_id, due_date, created_by) "

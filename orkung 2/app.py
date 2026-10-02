@@ -74,6 +74,7 @@ def create_app(config_object=Config):
     from blueprints.reports import bp as reports_bp
     from blueprints.admin import bp as admin_bp
     from blueprints.records_import import bp as records_import_bp
+    from blueprints.stock import bp as stock_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
@@ -86,6 +87,7 @@ def create_app(config_object=Config):
     app.register_blueprint(reports_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(records_import_bp)
+    app.register_blueprint(stock_bp)
 
     return app
 
