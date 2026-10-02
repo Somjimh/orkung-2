@@ -17,6 +17,11 @@
   and tasks already pending are skipped, so importing the same file twice does not add anything twice. Tags are matched by species, and leading zeros
   are ignored ('039' = '39').</p>
 </div>
+<div class="card section">
+  <h3>Check for duplicate weights</h3>
+  <p class="small muted">Finds weights recorded twice for the same animal (same weight, a few days apart) and lets you remove the extra copy.</p>
+  <a class="btn secondary" href="{{ url_for('records_import.duplicate_weights') }}">Check duplicate weights</a>
+</div>
 {% for key, k in kinds.items() %}
 <div class="card section">
   <h3>{{ loop.index }}. {{ k.label }}</h3>

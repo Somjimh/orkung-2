@@ -293,3 +293,59 @@ def commit():
     db.audit(g.user, "import", kind, summary=f"CSV {kind} import: {done} added, {skipped} skipped")
     flash(f"Import complete: {done} {KINDS[kind]['label'].lower()} added, {skipped} skipped.", "success")
     return redirect(url_for("records_import.form"))
+
+
+# ---------------------------------------------------------------------------
+# Duplicate-weight clean-up: the same weight recorded twice for one animal a
+# few days apart (e.g. 12 Sep book weights that were first typed in under the
+# entry date 20 Sep). Keeps the earlier record, removes the later copy.
+# ---------------------------------------------------------------------------
+DUP_WINDOW_DAYS = 14
+
+
+def _find_duplicate_weights():
+    rows = db.query(
+        "SELECT w.id, w.animal_id, w.weight_kg, w.measured_on, w.method, w.notes, a.tag_id, sp.name AS species "
+        "FROM weight_records w JOIN animals a ON a.id=w.animal_id LEFT JOIN species sp ON sp.id=a.species_id "
+        "ORDER BY w.animal_id, w.measured_on, w.id")
+    by_animal = defaultdict(list)
+    for r in rows:
+        by_animal[r["animal_id"]].append(r)
+    dupes, near = [], []
+    for recs in by_animal.values():
+        removed = set()
+        for i, later in enumerate(recs):
+            for earlier in recs[:i]:
+                if earlier["id"] in removed or later["id"] in removed:
+                    continue
+                gap = db.days_between(earlier["measured_on"], later["measured_on"])
+                if gap is None or gap < 0 or gap > DUP_WINDOW_DAYS:
+                    continue
+                if abs(earlier["weight_kg"] - later["weight_kg"]) < 0.05:
+                    dupes.append(dict(keep=earlier, drop=later))
+                    removed.add(later["id"])
+                    break
+    return dupes
+
+
+@bp.route("/duplicate-weights", methods=["GET"])
+@auth.login_required
+@auth.require_roles(*auth.MANAGEMENT)
+def duplicate_weights():
+    return render_template("records_dupes.html", dupes=_find_duplicate_weights(), window=DUP_WINDOW_DAYS)
+
+
+@bp.route("/duplicate-weights/remove", methods=["POST"])
+@auth.login_required
+@auth.require_roles(*auth.MANAGEMENT)
+def remove_duplicate_weights():
+    dupes = _find_duplicate_weights()  # recomputed from live data
+    for d in dupes:
+        k, x = d["keep"], d["drop"]
+        db.execute("DELETE FROM weight_records WHERE id=?", (x["id"],))
+        db.audit(g.user, "delete", "weight_record", x["id"],
+                 f"Removed duplicate weight {x['weight_kg']} kg on {x['measured_on'][:10]} for {x['species']} {x['tag_id']} "
+                 f"(same weight already recorded on {k['measured_on'][:10]})",
+                 details=dict(removed=dict(x), kept_id=k["id"]))
+    flash(f"Removed {len(dupes)} duplicate weight record(s). The earlier record of each was kept.", "success")
+    return redirect(url_for("records_import.duplicate_weights"))

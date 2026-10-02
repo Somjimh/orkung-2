@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Duplicate Weights - {{ app_name }}{% endblock %}
+{% block heading %}Duplicate weights{% endblock %}
+{% block content %}
+<div class="card section">
+  <p>These animals have the <strong>same weight recorded twice</strong>, up to {{ window }} days apart. The earlier record is kept and the later copy is removed.
+  Weights that differ are never touched. Every removal is written to the Audit history.</p>
+  {% if dupes %}
+  <form method="post" action="{{ url_for('records_import.remove_duplicate_weights') }}">
+    <button class="btn" type="submit" data-confirm="Remove {{ dupes|length }} duplicate weight record(s)?">Remove {{ dupes|length }} duplicate(s)</button>
+    <a class="btn secondary" href="{{ url_for('records_import.form') }}">Back</a>
+  </form>
+  {% else %}
+  <p><span class="pill green">No duplicate weights found.</span></p>
+  <a class="btn secondary" href="{{ url_for('records_import.form') }}">Back</a>
+  {% endif %}
+</div>
+{% if dupes %}
+<div class="table-wrap">
+<table class="data">
+  <thead><tr><th>Species</th><th>Tag</th><th>Weight (kg)</th><th>Keep</th><th>Remove</th></tr></thead>
+  <tbody>
+  {% for d in dupes %}
+  <tr>
+    <td data-label="Species">{{ d.keep.species }}</td>
+    <td data-label="Tag"><a href="{{ url_for('animals.profile', animal_id=d.keep.animal_id, tab='weights') }}">{{ d.keep.tag_id }}</a></td>
+    <td data-label="Weight">{{ d.keep.weight_kg }}</td>
+    <td data-label="Keep"><span class="pill green">{{ d.keep.measured_on[:10] }}</span></td>
+    <td data-label="Remove"><span class="pill red">{{ d.drop.measured_on[:10] }}</span></td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+{% endblock %}
