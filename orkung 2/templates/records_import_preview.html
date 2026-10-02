@@ -16,6 +16,7 @@
   <thead><tr><th>Line</th>
   {% if kind == 'tasks' %}<th>Title</th><th>Priority</th><th>Due</th>
   {% elif kind == 'weights' %}<th>Species</th><th>Tag</th><th>Date</th><th>Weight (kg)</th>
+  {% elif kind == 'observations' %}<th>Date</th><th>Species</th><th>Tag</th><th>Signs</th><th>Suspected problem</th><th>Action</th>
   {% elif kind == 'stock' %}<th>Item</th><th>Location</th><th>Pack</th><th>Full packs</th><th>Loose</th><th>Batch</th><th>Expiry</th><th>Price / pack</th>
   {% elif kind == 'treatments' %}<th>Date</th><th>Species</th><th>Tag</th><th>Treatment</th><th>Medicine</th><th>Dose</th>
   {% else %}<th>Species</th><th>Tag</th><th>Sex</th><th>Born</th><th>Mother</th><th>Status</th>{% endif %}
@@ -26,6 +27,9 @@
     <td data-label="Line">{{ r.line }}</td>
     {% if kind == 'tasks' %}
     <td data-label="Title">{{ r.data.title }}</td><td data-label="Priority">{{ r.data.priority }}</td><td data-label="Due">{{ r.data.due_date }}</td>
+    {% elif kind == 'observations' %}
+    <td data-label="Date">{{ r.data.date }}</td><td data-label="Species">{{ r.data.species }}</td><td data-label="Tag">{{ r.data.tag_id }}</td>
+    <td data-label="Signs">{{ r.data.signs or '—' }}</td><td data-label="Suspected">{{ r.data.suspected_problem or '—' }}</td><td data-label="Action">{{ r.data.action or '—' }}</td>
     {% elif kind == 'stock' %}
     <td data-label="Item">{{ r.data.item }}</td><td data-label="Location">{{ r.data.location }}</td><td data-label="Pack">{{ r.data.pack_size }}</td>
     <td data-label="Full packs">{{ r.data.full_packs }}</td><td data-label="Loose">{{ r.data.loose_qty or '—' }}</td><td data-label="Batch">{{ r.data.batch_no or '—' }}</td>

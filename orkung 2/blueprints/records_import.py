@@ -29,6 +29,12 @@ KINDS = {
         label="Weights",
         header=["species", "tag_id", "measured_on", "weight_kg", "notes"],
         example=[("Goat", "039", "2026-09-12", "31.5", "From weights book")]),
+    "observations": dict(
+        label="Health observations",
+        header=["date", "species", "tag_id", "signs", "temperature", "eating", "suspected_problem", "vet_diagnosis",
+                "action", "seen_by", "notes"],
+        example=[("2026-10-05", "Goat", "132", "Coughing, runny nose", "39.8", "Less than usual", "Pneumonia?", "",
+                  "Treated", "Juma", "Kept in shade")]),
     "stock": dict(
         label="Medicine stock count",
         header=["count_date", "item", "category", "location", "pack_size", "full_packs", "loose_qty", "batch_no", "expiry",
@@ -86,10 +92,14 @@ ALIASES = {
     "tag": "tag_id", "tagno": "tag_id", "tagnumber": "tag_id", "animaltag": "tag_id",
     "treatment": "treatment_type", "treatmenttype": "treatment_type", "type": "treatment_type",
     "medicine": "medicine", "medicinevaccine": "medicine", "drug": "medicine", "product": "medicine",
-    "unit": "dose_unit", "doseunit": "dose_unit", "reasonsigns": "reason", "reason": "reason", "signs": "reason",
+    "unit": "dose_unit", "doseunit": "dose_unit", "reasonsigns": "reason", "reason": "reason",
     "givenby": "given_by", "vet": "vet", "veterinarian": "vet", "withdrawaldays": "withdrawal_days",
     "meatwithdrawaldays": "withdrawal_days", "followupdate": "follow_up_date", "followup": "follow_up_date",
     "date": "date", "datetreated": "date", "weightkg": "weight_kg", "measuredon": "measured_on",
+    "signsseen": "signs", "signssymptoms": "signs", "symptoms": "signs", "tempc": "temperature", "temperaturec": "temperature",
+    "eatingdrinking": "eating", "appetite": "eating", "suspectedproblem": "suspected_problem", "provisionaldiagnosis": "suspected_problem",
+    "vetdiagnosis": "vet_diagnosis", "confirmedbyvet": "vet_diagnosis", "confirmeddiagnosis": "vet_diagnosis",
+    "actiontaken": "action", "seenby": "seen_by", "observedby": "seen_by",
     "duedate": "due_date", "itemname": "item", "itemnameasonlabel": "item", "name": "item",
     "locationshelf": "location", "packsizeunit": "pack_size", "packsize": "pack_size", "fullpacks": "full_packs",
     "looseqtyunit": "loose_qty", "looseqty": "loose_qty", "batchno": "batch_no", "batch": "batch_no", "expirydate": "expiry",
@@ -120,7 +130,10 @@ def _xlsx_to_csv(src, dest, kind):
     from openpyxl import load_workbook
     wb = load_workbook(src, data_only=True, read_only=True)
     need = {"title"} if kind == "tasks" else {"item"} if kind == "stock" else {"tag_id"}
-    for ws in wb.worksheets:
+    hint = {"observations": "observ", "treatments": "treat", "weights": "weigh", "animals": "animal", "stock": "stock",
+            "tasks": "task"}.get(kind, "")
+    sheets = sorted(wb.worksheets, key=lambda ws: 0 if hint and hint in ws.title.lower() else 1)
+    for ws in sheets:
         rows = list(ws.iter_rows(values_only=True))
         for hi, row in enumerate(rows[:15]):
             keys = [_key(_cell(c)) for c in row]
@@ -216,6 +229,28 @@ def _check(kind, rows):
                 prev = last.get(a["id"])
                 if prev and abs(wt - prev) / prev * 100 > current_app.config["WEIGHT_CHANGE_WARN_PCT"]:
                     notes.append("big change from last weight (will be flagged)")
+            out.append(dict(line=i, data=r, errors=errs, notes=notes))
+    elif kind == "observations":
+        existing = {(o["animal_id"], (o["observation_date"] or "")[:10], (o["symptoms"] or "").strip().lower())
+                    for o in db.query("SELECT animal_id, observation_date, symptoms FROM health_observations")}
+        for i, r in enumerate(rows, start=2):
+            errs, notes = [], []
+            sid = species.get(r.get("species", "").lower())
+            targets = _treatment_targets(sid, r.get("tag_id"), by_key) if sid else []
+            if not sid:
+                errs.append("unknown species")
+            elif not targets:
+                errs.append("animal not on the site")
+            if not _valid_date(r.get("date")):
+                errs.append("date must be a date")
+            if not (r.get("signs") or r.get("suspected_problem") or r.get("notes")):
+                errs.append("write what was seen")
+            if not errs:
+                new = [a for a in targets if (a["id"], r["date"][:10], (r.get("signs") or "").strip().lower()) not in existing]
+                if not new:
+                    errs.append("already recorded (skipped)")
+                elif len(targets) > 1:
+                    notes.append(f"applies to {len(new)} animals")
             out.append(dict(line=i, data=r, errors=errs, notes=notes))
     elif kind == "stock":
         from blueprints import stock as st
@@ -436,6 +471,38 @@ def commit():
                 "VALUES (?,?,?,?,?,?,?)", (a["id"], wt, r["measured_on"][:10], "scale", r.get("notes") or None, flagged, uid))
             db.audit(g.user, "import", "weight_record", new_id, f"Imported weight {wt} kg for {r['tag_id']} on {r['measured_on']}")
             done += 1
+    elif kind == "observations":
+        species, by_key = _lookups()
+        existing = {(o["animal_id"], (o["observation_date"] or "")[:10], (o["symptoms"] or "").strip().lower())
+                    for o in db.query("SELECT animal_id, observation_date, symptoms FROM health_observations")}
+        for row in checked:
+            if not row["ok"]:
+                continue
+            r = row["data"]
+            sid = species[r["species"].lower()]
+            extra = []
+            if r.get("temperature"):
+                extra.append(f"Temp {r['temperature']} °C")
+            if r.get("eating"):
+                extra.append(f"Eating: {r['eating']}")
+            if r.get("action"):
+                extra.append(f"Action: {r['action']}")
+            if r.get("seen_by"):
+                extra.append(f"Seen by: {r['seen_by']}")
+            if r.get("notes"):
+                extra.append(r["notes"])
+            for a in _treatment_targets(sid, r.get("tag_id"), by_key):
+                key = (a["id"], r["date"][:10], (r.get("signs") or "").strip().lower())
+                if key in existing:
+                    continue
+                new_id = db.execute(
+                    "INSERT INTO health_observations (animal_id, observation_date, symptoms, provisional_diagnosis, confirmed_diagnosis, "
+                    "notes, created_by) VALUES (?,?,?,?,?,?,?)",
+                    (a["id"], r["date"][:10], r.get("signs") or None, r.get("suspected_problem") or None,
+                     r.get("vet_diagnosis") or None, "; ".join(extra) or None, uid))
+                existing.add(key)
+                db.audit(g.user, "import", "health_observation", new_id, f"Imported observation for {r['species']} {a['tag_id']} on {r['date']}")
+                done += 1
     elif kind == "stock":
         from blueprints import stock as st
         for row in checked:
@@ -513,10 +580,7 @@ def commit():
                        if (a["id"], r["date"][:10], what.lower()) not in seen_t]
             for a in targets:
                 obs_id = None
-                if r.get("reason"):
-                    obs_id = db.execute(
-                        "INSERT INTO health_observations (animal_id, observation_date, symptoms, notes, created_by) VALUES (?,?,?,?,?)",
-                        (a["id"], r["date"][:10], r["reason"], "Imported with treatment", uid))
+                tnotes = "; ".join(x for x in [f"Reason: {r['reason']}" if r.get("reason") else "", r.get("notes") or ""] if x) or None
                 new_id = db.execute(
                     "INSERT INTO treatments (animal_id, health_observation_id, treatment_type, medicine_id, medicine_name, dose, "
                     "dose_unit, route, start_date, administered_by, veterinarian, meat_withdrawal_end, milk_withdrawal_end, "
@@ -524,7 +588,7 @@ def commit():
                     (a["id"], obs_id, r.get("treatment_type") or None, med["id"] if med else None,
                      None if med else (r.get("medicine") or None), r.get("dose") or None, r.get("dose_unit") or None,
                      r.get("route") or None, r["date"][:10], r.get("given_by") or g.user["full_name"], r.get("vet") or None,
-                     meat_wd, milk_wd, r.get("follow_up_date") or None, r.get("result") or None, r.get("notes") or None, uid))
+                     meat_wd, milk_wd, r.get("follow_up_date") or None, r.get("result") or None, tnotes, uid))
                 seen_t.add((a["id"], r["date"][:10], what.lower()))
                 if r.get("medicine"):
                     from blueprints.stock import deduct_for_treatment
@@ -553,7 +617,7 @@ def commit():
             db.audit(g.user, "import", "task", new_id, f"Imported task: {r['title']}")
             done += 1
     os.remove(path)
-    skipped = sum(1 for r in checked if not r["ok"]) if kind == "treatments" else len(checked) - done
+    skipped = sum(1 for r in checked if not r["ok"]) if kind in ("treatments", "observations") else len(checked) - done
     db.audit(g.user, "import", kind, summary=f"CSV {kind} import: {done} added, {skipped} skipped")
     flash(f"Import complete: {done} {KINDS[kind]['label'].lower()} added, {skipped} skipped.", "success")
     return redirect(url_for("records_import.form"))
