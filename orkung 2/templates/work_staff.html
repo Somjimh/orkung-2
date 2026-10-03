@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% import "_farm.html" as f with context %}
+{% block title %}Staff - {{ app_name }}{% endblock %}
+{% block heading %}Staff Register{% endblock %}
+{% block topbar_actions %}<a class="btn secondary" href="{{ url_for('payroll.index') }}">Payroll</a>{% endblock %}
+{% block content %}
+{{ f.farm_tabs('workers') }}
+<div class="card section">
+  <div class="btn-row" style="justify-content:space-between;"><h3>{{ 'All staff, including those who have left' if show_all else 'Current staff' }} · attendance {{ label }}</h3>
+    <a class="small" href="{{ url_for('work.workers', all='0' if show_all else '1') }}">{{ 'Current staff only' if show_all else 'Show people who have left' }}</a></div>
+  {% if staff %}
+  <div class="table-wrap"><table class="data">
+    <thead><tr><th>Name</th><th>Job</th><th>Paid</th><th>Rate (KES)</th><th>Present</th><th>Half</th><th>Absent</th><th>Sick / leave</th><th>Advance owed</th></tr></thead>
+    <tbody>{% for w in staff %}{% set a = att.get(w.id, {}) %}
+    <tr><td data-label="Name"><a href="{{ url_for('work.worker', wid=w.id) }}">{{ w.name }}</a>{% if not w.active %} <span class="pill gray">left</span>{% endif %}{% if w.phone %}<div class="muted small">{{ w.phone }}</div>{% endif %}</td>
+      <td data-label="Job">{{ w.job_title or '—' }}</td><td data-label="Paid">{{ 'Monthly' if w.pay_type=='monthly' else 'Daily (casual)' }}</td>
+      <td data-label="Rate">{{ '{:,.0f}'.format(w.monthly_salary) ~ ' a month' if w.pay_type=='monthly' else '{:,.0f}'.format(w.daily_rate or 0) ~ ' a day' }}</td>
+      <td data-label="Present">{{ a.get('present', 0) }}</td><td data-label="Half">{{ a.get('half', 0) }}</td>
+      <td data-label="Absent">{% if a.get('absent') %}<span class="pill amber">{{ a.absent }}</span>{% else %}0{% endif %}</td>
+      <td data-label="Sick / leave">{{ a.get('sick', 0) + a.get('leave', 0) }}</td>
+      <td data-label="Advance owed">{% if adv[w.id] > 0 %}<span class="pill amber">{{ '{:,.0f}'.format(adv[w.id]) }}</span>{% else %}—{% endif %}</td></tr>
+    {% endfor %}</tbody></table></div>
+  {% else %}<p class="muted">No staff yet. Add each person who is paid, permanent or casual.</p>{% endif %}
+</div>
+
+{% if can_edit %}
+<div class="card section">
+  <h3>Add a member of staff</h3>
+  <form method="post" class="form-grid">
+    <div class="field"><label>Full name *</label><input type="text" name="name" required></div>
+    <div class="field"><label>Phone / M-Pesa number</label><input type="text" name="phone"></div>
+    <div class="field"><label>Job</label><input type="text" name="job_title" placeholder="Farm manager, herder, picker, guard" list="jobs">
+      <datalist id="jobs"><option>Farm manager</option><option>Storekeeper</option><option>Herder</option><option>General worker</option><option>Picker</option><option>Guard</option><option>Driver</option></datalist></div>
+    <div class="field"><label>How paid *</label><select name="pay_type" id="ptype" onchange="document.getElementById('msal').style.display=this.value=='monthly'?'':'none';document.getElementById('drate').style.display=this.value=='daily'?'':'none';">
+      <option value="monthly">Monthly salary</option><option value="daily">Daily rate (casual)</option></select></div>
+    <div class="field" id="msal"><label>Monthly salary, gross (KES)</label><input type="number" step="1" name="monthly_salary"></div>
+    <div class="field" id="drate" style="display:none;"><label>Daily rate (KES)</label><input type="number" step="1" name="daily_rate"></div>
+    <div class="field"><label>Started</label><input type="date" name="start_date" value="{{ today }}"></div>
+    <div class="field"><label>Notes</label><input type="text" name="notes"></div>
+    <div><button class="btn" type="submit">Add</button></div>
+  </form>
+  <p class="small muted">Pay here is gross: statutory deductions (PAYE, SHIF, NSSF, Housing Levy) are left to the accountant. A monthly salary is turned into a day cost at {{ '%g'|format(divisor) }} working days a month.</p>
+</div>
+{% endif %}
+{% endblock %}

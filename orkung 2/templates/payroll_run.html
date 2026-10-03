@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Payroll {{ r.period }} - {{ app_name }}{% endblock %}
+{% block heading %}Payroll · {{ label }}{% endblock %}
+{% block topbar_actions %}
+<a class="btn secondary" href="{{ url_for('payroll.index') }}">All pay runs</a>
+<a class="btn secondary" href="{{ url_for('payroll.run', period=r.period, export='xlsx') }}">Export Excel</a>
+<button class="btn secondary" type="button" onclick="window.print()">Print</button>
+{% endblock %}
+{% block content %}
+<div class="kpi-row grid cols-4 section">
+  <div class="stat-card"><div class="stat-label">Status</div><div class="stat-value" style="font-size:1.2rem;"><span class="pill {{ 'gray' if r.status=='draft' else ('amber' if r.status=='approved' else 'green') }}">{{ r.status }}</span></div>
+    <div class="stat-sub">{% if approver %}approved by {{ approver.full_name }} {{ r.approved_at|fmtdate }}{% else %}not yet approved{% endif %}</div></div>
+  <div class="stat-card"><div class="stat-label">Gross (KES)</div><div class="stat-value">{{ '{:,.0f}'.format(tot.gross) }}</div></div>
+  <div class="stat-card"><div class="stat-label">Advances recovered</div><div class="stat-value">{{ '{:,.0f}'.format(tot.advances) }}</div></div>
+  <div class="stat-card"><div class="stat-label">Net to pay (KES)</div><div class="stat-value">{{ '{:,.0f}'.format(tot.net) }}</div></div>
+</div>
+
+{% set unmarked = [] %}{% for l in lines %}{% if marked.get(l.worker_id, 0) < days_in %}{% set _ = unmarked.append(l) %}{% endif %}{% endfor %}
+{% if r.status == 'draft' and unmarked %}
+<div class="flash info no-print">{{ unmarked|length }} of {{ lines|length }} people have days in {{ label }} with no attendance marked. Monthly staff are paid in full for unmarked days and casuals are paid nothing for them, so finish the daily sheets, then recalculate.</div>
+{% endif %}
+
+<form method="post" action="{{ url_for('payroll.mark_paid', period=r.period) }}" id="payform"></form>
+<div class="card section">
+  <div class="table-wrap"><table class="data">
+    <thead><tr>{% if can_pay %}<th class="no-print"><input type="checkbox" onclick="document.querySelectorAll('.paybox').forEach(c=>c.checked=this.checked)"></th>{% endif %}
+      <th>Name</th><th>Rate</th><th>Days</th><th>Basic</th><th>Absence</th><th>Additions</th><th>Gross</th><th>Advances</th><th>Other ded.</th><th>Net</th><th>Paid</th></tr></thead>
+    <tbody>{% for l in lines %}
+    <tr>
+      {% if can_pay %}<td data-label="" class="no-print">{% if not l.paid_date %}<input class="paybox" type="checkbox" name="line_id" value="{{ l.id }}" form="payform">{% endif %}</td>{% endif %}
+      <td data-label="Name"><a href="{{ url_for('payroll.slip', period=r.period, wid=l.worker_id) }}">{{ l.name }}</a>{% if l.notes %}<div class="muted small">{{ l.notes }}</div>{% endif %}</td>
+      <td data-label="Rate">{{ '{:,.0f}'.format(l.rate or 0) }}<span class="muted small">/{{ 'mo' if l.pay_type=='monthly' else 'day' }}</span></td>
+      <td data-label="Days">{{ '%g'|format(l.days_present) }}{% if l.days_paid_leave %} <span class="muted small">+{{ '%g'|format(l.days_paid_leave) }} sick/leave</span>{% endif %}{% if l.days_absent %} <span class="pill amber">{{ '%g'|format(l.days_absent) }} absent</span>{% endif %}
+        {% if marked.get(l.worker_id, 0) < days_in %}<div class="muted small">{{ days_in - marked.get(l.worker_id, 0) }} days not marked</div>{% endif %}</td>
+      <td data-label="Basic">{{ '{:,.0f}'.format(l.basic) }}</td>
+      <td data-label="Absence">{{ ('−' ~ '{:,.0f}'.format(l.absence_deduction)) if l.absence_deduction else '—' }}</td>
+      <td data-label="Additions">{{ '{:,.0f}'.format(l.additions) if l.additions else '—' }}</td>
+      <td data-label="Gross">{{ '{:,.0f}'.format(l.gross) }}</td>
+      <td data-label="Advances">{{ ('−' ~ '{:,.0f}'.format(l.advances)) if l.advances else '—' }}</td>
+      <td data-label="Other ded.">{{ ('−' ~ '{:,.0f}'.format(l.other_deductions)) if l.other_deductions else '—' }}</td>
+      <td data-label="Net"><strong>{{ '{:,.0f}'.format(l.net) }}</strong></td>
+      <td data-label="Paid">{% if l.paid_date %}<span class="pill green">{{ l.paid_date }}</span>{% if l.payment_ref %}<div class="muted small">{{ l.payment_ref }}</div>{% endif %}{% elif can_pay %}<input type="text" name="ref_{{ l.id }}" form="payform" placeholder="M-Pesa ref" style="width:120px;min-height:34px;padding:.3rem;" class="no-print">{% else %}—{% endif %}</td>
+    </tr>
+    {% if can_edit %}<tr class="no-print"><td colspan="12" data-label="Adjust {{ l.name }}">
+      <form method="post" action="{{ url_for('payroll.edit_line', period=r.period, lid=l.id) }}" class="btn-row small">
+        <span>Additions <input type="number" step="1" name="additions" value="{{ '%g'|format(l.additions) }}" style="width:95px;min-height:32px;padding:.25rem;"></span>
+        <span>Advance deduction <input type="number" step="1" name="advances" value="{{ '%g'|format(l.advances) }}" style="width:95px;min-height:32px;padding:.25rem;"></span>
+        <span>Other deductions <input type="number" step="1" name="other_deductions" value="{{ '%g'|format(l.other_deductions) }}" style="width:95px;min-height:32px;padding:.25rem;"></span>
+        <input type="text" name="notes" value="{{ l.notes or '' }}" placeholder="reason (overtime, breakage...)" style="width:220px;min-height:32px;padding:.25rem;">
+        <button class="btn small subtle" type="submit">Save</button></form></td></tr>{% endif %}
+    {% endfor %}
+    <tr><td data-label="Totals" {% if can_pay %}colspan="2"{% endif %}><strong>Totals</strong></td><td></td><td></td><td data-label="Basic">{{ '{:,.0f}'.format(tot.basic) }}</td><td data-label="Absence">{{ '{:,.0f}'.format(tot.absence_deduction) }}</td><td data-label="Additions">{{ '{:,.0f}'.format(tot.additions) }}</td>
+      <td data-label="Gross"><strong>{{ '{:,.0f}'.format(tot.gross) }}</strong></td><td data-label="Advances">{{ '{:,.0f}'.format(tot.advances) }}</td><td data-label="Other">{{ '{:,.0f}'.format(tot.other_deductions) }}</td><td data-label="Net"><strong>{{ '{:,.0f}'.format(tot.net) }}</strong></td><td></td></tr>
+    </tbody></table></div>
+  <p class="small muted" style="margin-top:.6rem;">Monthly staff: salary less {{ '%g'|format(divisor) }}th of the salary for each unpaid absent day (a half day counts half). Casuals: daily rate for each day worked. Gross only.</p>
+</div>
+
+<div class="btn-row section no-print">
+  {% if can_edit %}
+  <form method="post" action="{{ url_for('payroll.recalc', period=r.period) }}"><button class="btn secondary" type="submit">Recalculate (keep my adjustments)</button></form>
+  <form method="post" action="{{ url_for('payroll.recalc', period=r.period) }}" onsubmit="return confirm('Start again from the sheets and the advances owed? Your adjustments on this page will be cleared.');"><input type="hidden" name="reset" value="1"><button class="btn subtle" type="submit">Recalculate from scratch</button></form>
+  {% endif %}
+  {% if can_approve and r.status == 'draft' %}
+  <form method="post" action="{{ url_for('payroll.approve', period=r.period) }}" onsubmit="return confirm('Approve {{ label }} pay of KES {{ '{:,.0f}'.format(tot.net) }}? This freezes the month\'s daily sheets.');"><button class="btn" type="submit">Approve pay run</button></form>
+  {% elif r.status == 'draft' %}<span class="small muted">Waiting for the administrator to approve.</span>{% endif %}
+  {% if can_approve and r.status == 'approved' %}
+  <form method="post" action="{{ url_for('payroll.reopen', period=r.period) }}"><button class="btn subtle" type="submit">Reopen for correction</button></form>{% endif %}
+  {% if can_pay %}
+  <span style="margin-left:auto;" class="btn-row"><input type="date" name="paid_date" value="{{ today }}" form="payform" style="width:160px;">
+    <button class="btn" type="submit" form="payform">Record payment for ticked people</button></span>{% endif %}
+</div>
+{% endblock %}

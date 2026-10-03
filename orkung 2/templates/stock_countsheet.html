@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Stock count sheet - {{ app_name }}{% endblock %}
+{% block heading %}Stock count sheet{% if cat %} · {{ categories[cat] }}{% endif %}{% endblock %}
+{% block topbar_actions %}<a class="btn secondary" href="{{ url_for('stock.index', cat=cat) }}">Back to store</a>
+<button class="btn" type="button" onclick="window.print()">Print</button>{% endblock %}
+{% block content %}
+<div class="card section">
+  <p class="small">Printed {{ today }}. Count every item on the shelf without looking at the "should be" column first, write the count, then enter it on each item's page as a <em>Count</em>. Any difference shows on the Losses report.</p>
+  <table class="data">
+    <thead><tr><th>Item</th><th>Type</th><th>Pack</th><th>Should be on the shelf</th><th style="width:22%;">Counted</th><th style="width:22%;">Checked by</th></tr></thead>
+    <tbody>{% for r in rows %}
+    <tr><td>{{ r.item.name }}</td><td>{{ r.item.category }}</td><td>{{ '%g'|format(r.item.pack_size) }} {{ r.item.unit }}</td>
+      <td>{{ '%g'|format(r.on_hand) }} {{ r.item.unit }}{% if r.packs is not none %} <span class="muted small">({{ '%.1f'|format(r.packs) }} packs)</span>{% endif %}</td><td></td><td></td></tr>
+    {% else %}<tr><td colspan="6" class="muted">No items.</td></tr>{% endfor %}</tbody>
+  </table>
+  <div class="grid cols-2" style="margin-top:2rem;"><div>Storekeeper: ______________________</div><div>Witness: ______________________</div></div>
+</div>
+{% endblock %}

@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash TEXT NOT NULL,
     full_name TEXT NOT NULL,
     email TEXT,
-    role TEXT NOT NULL CHECK(role IN ('admin','manager','worker','viewer','vet')),
+    role TEXT NOT NULL CHECK(role IN ('admin','manager','worker','viewer','vet','storekeeper')),
     active INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     last_login TEXT
@@ -319,3 +319,211 @@ CREATE TABLE IF NOT EXISTS stock_movements (
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_moves_item ON stock_movements(item_id, move_date);
+
+
+-- =============================================================================
+-- Crops, daily work, payroll, assets and milestones (added Oct 2026)
+-- =============================================================================
+
+-- A field block (e.g. "Block D") and what is planted on it.
+CREATE TABLE IF NOT EXISTS crop_blocks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code TEXT NOT NULL UNIQUE,                      -- short name, e.g. "D1"
+    name TEXT NOT NULL,
+    area_acres REAL,
+    water_source TEXT,
+    organic INTEGER NOT NULL DEFAULT 1,             -- 1 = inside the certified organic area
+    notes TEXT,
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS plantings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    block_id INTEGER NOT NULL REFERENCES crop_blocks(id),
+    crop TEXT NOT NULL,                             -- Habanero / Cayenne / Banana / Napier ...
+    variety TEXT,
+    area_acres REAL,
+    plant_count INTEGER,
+    planted_date TEXT NOT NULL,
+    first_harvest_date TEXT,                        -- expected
+    end_date TEXT,
+    status TEXT NOT NULL DEFAULT 'growing' CHECK(status IN ('nursery','growing','harvesting','finished','failed')),
+    notes TEXT,
+    created_by INTEGER REFERENCES users(id),
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_plantings_block ON plantings(block_id);
+
+-- Farm staff (people who are paid). They do not need a login.
+CREATE TABLE IF NOT EXISTS workers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    phone TEXT,                                     -- also the M-Pesa number
+    job_title TEXT,
+    pay_type TEXT NOT NULL CHECK(pay_type IN ('monthly','daily')),
+    monthly_salary REAL,                            -- KES gross a month (monthly staff)
+    daily_rate REAL,                                -- KES a day (casuals)
+    start_date TEXT,
+    end_date TEXT,
+    active INTEGER NOT NULL DEFAULT 1,
+    notes TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- One row per worker per day: the basis of pay.
+CREATE TABLE IF NOT EXISTS attendance (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    worker_id INTEGER NOT NULL REFERENCES workers(id),
+    work_date TEXT NOT NULL,
+    status TEXT NOT NULL CHECK(status IN ('present','half','absent','leave','sick','off')),
+    notes TEXT,
+    created_by INTEGER REFERENCES users(id),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(worker_id, work_date)
+);
+CREATE INDEX IF NOT EXISTS idx_attendance_date ON attendance(work_date);
+
+-- What each person did, where, and how much.
+CREATE TABLE IF NOT EXISTS work_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    work_date TEXT NOT NULL,
+    worker_id INTEGER NOT NULL REFERENCES workers(id),
+    activity TEXT NOT NULL,
+    block_id INTEGER REFERENCES crop_blocks(id),
+    planting_id INTEGER REFERENCES plantings(id),
+    hours REAL,
+    quantity REAL,
+    unit TEXT,
+    notes TEXT,
+    source TEXT NOT NULL DEFAULT 'entry',           -- 'sheet' = main job from the daily sheet
+    created_by INTEGER REFERENCES users(id),
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_worklogs_date ON work_logs(work_date);
+CREATE INDEX IF NOT EXISTS idx_worklogs_block ON work_logs(block_id, work_date);
+
+CREATE TABLE IF NOT EXISTS harvests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    harvest_date TEXT NOT NULL,
+    block_id INTEGER REFERENCES crop_blocks(id),
+    planting_id INTEGER REFERENCES plantings(id),
+    crop TEXT NOT NULL,
+    grade TEXT,
+    kg REAL NOT NULL,
+    notes TEXT,
+    created_by INTEGER REFERENCES users(id),
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_harvests_date ON harvests(harvest_date);
+
+CREATE TABLE IF NOT EXISTS crop_sales (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sale_date TEXT NOT NULL,
+    crop TEXT NOT NULL,
+    grade TEXT,
+    kg REAL NOT NULL,
+    price_per_kg REAL NOT NULL,
+    buyer TEXT,
+    reference TEXT,
+    amount_paid REAL NOT NULL DEFAULT 0,
+    paid_date TEXT,
+    notes TEXT,
+    created_by INTEGER REFERENCES users(id),
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_sales_date ON crop_sales(sale_date);
+
+-- Payroll ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS pay_advances (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    worker_id INTEGER NOT NULL REFERENCES workers(id),
+    advance_date TEXT NOT NULL,
+    amount REAL NOT NULL,
+    reason TEXT,
+    paid_by TEXT,                                   -- cash / M-Pesa ref
+    created_by INTEGER REFERENCES users(id),
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS pay_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    period TEXT NOT NULL UNIQUE,                    -- YYYY-MM
+    status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','approved','paid')),
+    notes TEXT,
+    created_by INTEGER REFERENCES users(id),
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    approved_by INTEGER REFERENCES users(id),
+    approved_at TEXT,
+    paid_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS pay_lines (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id INTEGER NOT NULL REFERENCES pay_runs(id),
+    worker_id INTEGER NOT NULL REFERENCES workers(id),
+    pay_type TEXT NOT NULL,
+    rate REAL,                                      -- monthly salary or daily rate used
+    days_present REAL NOT NULL DEFAULT 0,
+    days_paid_leave REAL NOT NULL DEFAULT 0,
+    days_absent REAL NOT NULL DEFAULT 0,
+    basic REAL NOT NULL DEFAULT 0,
+    absence_deduction REAL NOT NULL DEFAULT 0,
+    additions REAL NOT NULL DEFAULT 0,              -- overtime, bonus
+    advances REAL NOT NULL DEFAULT 0,
+    other_deductions REAL NOT NULL DEFAULT 0,
+    gross REAL NOT NULL DEFAULT 0,
+    net REAL NOT NULL DEFAULT 0,
+    notes TEXT,
+    paid_date TEXT,
+    payment_ref TEXT,
+    UNIQUE(run_id, worker_id)
+);
+
+-- Assets ----------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS assets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    asset_no TEXT NOT NULL UNIQUE,                  -- AST-0001
+    name TEXT NOT NULL,
+    category TEXT NOT NULL,
+    serial_no TEXT,
+    location TEXT,
+    quantity INTEGER NOT NULL DEFAULT 1,
+    purchase_date TEXT,
+    cost REAL,
+    condition TEXT NOT NULL DEFAULT 'good' CHECK(condition IN ('good','fair','needs_repair','broken')),
+    status TEXT NOT NULL DEFAULT 'in_use' CHECK(status IN ('in_use','in_store','out','lost','disposed')),
+    custodian_id INTEGER REFERENCES workers(id),    -- who is answerable for it
+    last_verified TEXT,
+    notes TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS asset_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    asset_id INTEGER NOT NULL REFERENCES assets(id),
+    event_date TEXT NOT NULL,
+    event_type TEXT NOT NULL,                       -- check_out / return / verified / repair / service / moved / lost / disposed / condition
+    worker_id INTEGER REFERENCES workers(id),
+    cost REAL,
+    notes TEXT,
+    created_by INTEGER REFERENCES users(id),
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_asset_events ON asset_events(asset_id, event_date);
+
+-- Milestones ------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS milestones (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    enterprise TEXT NOT NULL,                       -- Chillies / Bananas / Livestock / Sukoon Camp / Honey / Farm
+    title TEXT NOT NULL,
+    detail TEXT,
+    due_date TEXT,
+    owner TEXT,
+    status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','at_risk','done','dropped')),
+    done_date TEXT,
+    plan_key TEXT UNIQUE,                           -- set when loaded from the reset plan, so it loads once
+    created_by INTEGER REFERENCES users(id),
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT
+);

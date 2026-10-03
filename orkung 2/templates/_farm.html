@@ -1,0 +1,20 @@
+{% macro month_nav(endpoint, label, prev, next, args={}) %}
+<div class="btn-row section no-print" style="justify-content:space-between;">
+  <div class="btn-row">
+    <a class="btn small secondary" href="{{ url_for(endpoint, month=prev, **args) }}">&larr; {{ prev }}</a>
+    <strong style="font-size:1.05rem;color:var(--green-900);">{{ label }}</strong>
+    <a class="btn small secondary" href="{{ url_for(endpoint, month=next, **args) }}">{{ next }} &rarr;</a>
+  </div>
+</div>
+{% endmacro %}
+
+{% macro farm_tabs(active) %}
+<div class="tabs no-print">
+  <a href="{{ url_for('crops.index') }}" class="{{ 'active' if active=='crops' }}">Crops &amp; blocks</a>
+  {% if 'work' in nav %}<a href="{{ url_for('work.day') }}" class="{{ 'active' if active=='day' }}">Daily sheet</a>
+  <a href="{{ url_for('work.log') }}" class="{{ 'active' if active=='log' }}">Work log</a>{% endif %}
+  <a href="{{ url_for('crops.harvests') }}" class="{{ 'active' if active=='harvests' }}">Harvests</a>
+  {% if current_user.role not in ('worker','vet') %}<a href="{{ url_for('crops.sales') }}" class="{{ 'active' if active=='sales' }}">Sales</a>{% endif %}
+  {% if 'work' in nav %}<a href="{{ url_for('work.workers') }}" class="{{ 'active' if active=='workers' }}">Staff</a>{% endif %}
+</div>
+{% endmacro %}

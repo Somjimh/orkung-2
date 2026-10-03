@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% import "_farm.html" as f with context %}
+{% block title %}Crops - {{ app_name }}{% endblock %}
+{% block heading %}Crops &amp; Farm Work{% endblock %}
+{% block topbar_actions %}
+{% if 'work' in nav %}<a class="btn" href="{{ url_for('work.day') }}">Fill today's sheet</a>{% endif %}
+<a class="btn secondary" href="{{ url_for('crops.harvests') }}">Record harvest</a>
+{% endblock %}
+{% block content %}
+{{ f.farm_tabs('crops') }}
+{{ f.month_nav('crops.index', label, prev, next) }}
+
+{% if 'work' in nav and staff and not att_map and today[:7] == period %}
+<div class="flash error">Today's daily sheet has not been filled yet ({{ staff|length }} staff on the register). <a href="{{ url_for('work.day') }}">Fill it now</a>.</div>
+{% endif %}
+{% if 'work' in nav and staff and not marked_y and today[:7] == period %}
+<div class="flash info">Yesterday has no attendance recorded. <a href="{{ url_for('work.day', d=yesterday) }}">Fill yesterday's sheet</a>.</div>
+{% endif %}
+
+<div class="kpi-row grid cols-4 section">
+  <div class="stat-card"><div class="stat-label">At work today</div><div class="stat-value">{{ (att_map.get('present',0) + att_map.get('half',0)) }} / {{ staff|length }}</div>
+    <div class="stat-sub">{{ att_map.get('absent',0) }} absent · {{ att_map.get('sick',0) + att_map.get('leave',0) }} sick/leave</div></div>
+  <div class="stat-card"><div class="stat-label">Labour cost ({{ period }})</div><div class="stat-value">{{ fmt(labour_total) }}</div>
+    <div class="stat-sub">{{ '%g'|format(labour_days) }} worker-days</div></div>
+  <div class="stat-card"><div class="stat-label">Inputs issued (KES)</div><div class="stat-value">{{ fmt(inputs_total) }}</div>
+    <div class="stat-sub">chemicals, fertiliser, seed, fuel</div></div>
+  <div class="stat-card {{ 'red' if idle_days else '' }}"><div class="stat-label">Paid days with no job logged</div><div class="stat-value">{{ idle_days }}</div>
+    <div class="stat-sub">KES {{ fmt(idle_cost) }} of pay not linked to any work</div></div>
+  <div class="stat-card"><div class="stat-label">Harvested (kg)</div><div class="stat-value">{{ fmt(kg) }}</div></div>
+  <div class="stat-card"><div class="stat-label">Sales (KES)</div><div class="stat-value">{{ fmt(sales.v) }}</div>
+    <div class="stat-sub">received {{ fmt(sales.p) }}</div></div>
+  <div class="stat-card {{ 'amber' if owed > 0.5 else '' }}"><div class="stat-label">Owed by buyers (all time)</div><div class="stat-value">{{ fmt(owed) }}</div></div>
+  <div class="stat-card"><div class="stat-label">Active plantings</div><div class="stat-value">{{ plantings|length }}</div></div>
+</div>
+
+{% if holds or low or milestones %}
+<div class="grid cols-3 section">
+  <div class="card"><h3>Do not harvest yet</h3>
+    {% for bid, h in holds.items() %}<p class="small"><span class="pill red">{{ blk[bid].code }}</span> sprayed with {{ h[1] }}: safe from <strong>{{ h[0] }}</strong></p>
+    {% else %}<p class="small muted">No block is inside a pre-harvest interval.</p>{% endfor %}</div>
+  <div class="card"><h3>Store running low</h3>
+    {% for i in low %}<p class="small"><a href="{{ url_for('stock.item', item_id=i.id) }}">{{ i.name }}</a>: {{ '%g'|format(i.on_hand) }} {{ i.unit }} left</p>
+    {% else %}<p class="small muted">Nothing below its reorder level.</p>{% endfor %}</div>
+  <div class="card"><h3>Milestones due</h3>
+    {% for m, r in milestones %}<p class="small"><span class="pill {{ r[0] }}">{{ r[1] }}</span> {{ m.due_date }} · {{ m.enterprise }}: {{ m.title }}</p>
+    {% else %}<p class="small muted">Nothing due in the next 14 days.</p>{% endfor %}
+    {% if 'milestones' in nav %}<a class="small" href="{{ url_for('milestones.index') }}">All milestones &rarr;</a>{% endif %}</div>
+</div>
+{% endif %}
+
+<div class="card section">
+  <div class="btn-row" style="justify-content:space-between;"><h3>Cost per block, {{ label }}</h3>
+    <a class="btn small subtle no-print" href="{{ url_for('crops.report_blocks', month=period) }}">Print / export</a></div>
+  {% if block_rows or general.total %}
+  <div class="table-wrap"><table class="data">
+    <thead><tr><th>Block</th><th>Acres</th><th>Labour (KES)</th><th>Inputs (KES)</th><th>Total (KES)</th><th>Harvest (kg)</th><th>Cost per kg</th></tr></thead>
+    <tbody>{% for r in block_rows %}
+      <tr><td data-label="Block"><a href="{{ url_for('crops.block', block_id=r.block.id, month=period) }}">{{ r.block.code }}</a> <span class="muted small">{{ r.block.name if r.block.name != r.block.code }}</span>{% if r.block.organic %} <span class="pill green">organic</span>{% endif %}</td>
+        <td data-label="Acres">{{ r.block.area_acres or '—' }}</td><td data-label="Labour">{{ fmt(r.labour) }}</td><td data-label="Inputs">{{ fmt(r.inputs) }}</td>
+        <td data-label="Total"><strong>{{ fmt(r.total) }}</strong></td><td data-label="Harvest">{{ fmt(r.kg) }}</td><td data-label="Cost per kg">{{ '%.1f'|format(r.per_kg) if r.per_kg else '—' }}</td></tr>
+    {% endfor %}
+      <tr><td data-label="Block"><em>Not on a block</em> <span class="muted small">livestock, camp, repairs, idle</span></td><td data-label="Acres">—</td>
+        <td data-label="Labour">{{ fmt(general.labour) }}</td><td data-label="Inputs">{{ fmt(general.inputs) }}</td><td data-label="Total"><strong>{{ fmt(general.total) }}</strong></td><td data-label="Harvest">—</td><td data-label="Cost per kg">—</td></tr>
+    </tbody></table></div>
+  {% else %}<p class="muted">No blocks yet. Add your first block below (for example the two half-acre habanero plots and Block D for bananas).</p>{% endif %}
+</div>
+
+{% if crops %}
+<div class="card section">
+  <div class="btn-row" style="justify-content:space-between;"><h3>Crop margins, {{ label }}</h3>
+    {% if current_user.role not in ('worker','vet') %}<a class="btn small subtle no-print" href="{{ url_for('crops.report_crops', month=period) }}">Print / export</a>{% endif %}</div>
+  <div class="table-wrap"><table class="data">
+    <thead><tr><th>Crop</th><th>Cost (KES)</th><th>Harvested (kg)</th><th>Sold (kg)</th><th>Sales (KES)</th><th>Received (KES)</th><th>Sales less cost</th></tr></thead>
+    <tbody>{% for c, v in crops.items() %}
+    <tr><td data-label="Crop">{{ c }}</td><td data-label="Cost">{{ fmt(v.cost) }}</td><td data-label="Harvested">{{ fmt(v.kg) }}</td><td data-label="Sold">{{ fmt(v.sold_kg) }}</td>
+      <td data-label="Sales">{{ fmt(v.sales) }}</td><td data-label="Received">{{ fmt(v.received) }}</td>
+      <td data-label="Sales less cost"><span class="pill {{ 'green' if v.margin >= 0 else 'red' }}">{{ fmt(v.margin) }}</span></td></tr>
+    {% endfor %}</tbody></table></div>
+  <p class="small muted" style="margin-top:.6rem;">Costs here are labour and store issues only, new cash, pre-tax. A crop still growing will show a loss until it is harvested and sold.</p>
+</div>
+{% endif %}
+
+<div class="card section">
+  <h3>What is growing</h3>
+  {% if plantings %}
+  <div class="table-wrap"><table class="data">
+    <thead><tr><th>Block</th><th>Crop</th><th>Planted</th><th>Age</th><th>Plants</th><th>First harvest</th><th>Status</th></tr></thead>
+    <tbody>{% for p in plantings %}
+    <tr><td data-label="Block"><a href="{{ url_for('crops.block', block_id=p.block_id) }}">{{ p.block_code }}</a></td>
+      <td data-label="Crop">{{ p.crop }}{% if p.variety %} <span class="muted small">{{ p.variety }}</span>{% endif %}</td>
+      <td data-label="Planted">{{ p.planted_date }}</td><td data-label="Age">{{ p.planted_date|age }}</td>
+      <td data-label="Plants">{{ p.plant_count or '—' }}</td><td data-label="First harvest">{{ p.first_harvest_date or '—' }}</td>
+      <td data-label="Status"><span class="pill {{ 'amber' if p.status=='harvesting' else 'green' }}">{{ p.status }}</span></td></tr>
+    {% endfor %}</tbody></table></div>
+  {% else %}<p class="muted">No plantings recorded yet. Open a block to record what was planted.</p>{% endif %}
+</div>
+
+{% if can_edit %}
+<div class="card section">
+  <h3>Add a block</h3>
+  <form method="post" action="{{ url_for('crops.add_block') }}" class="form-grid">
+    <div class="field"><label>Code *</label><input type="text" name="code" placeholder="e.g. HAB-A, CAY-A, D1" required></div>
+    <div class="field"><label>Name</label><input type="text" name="name" placeholder="Habanero half-acre A"></div>
+    <div class="field"><label>Acres</label><input type="number" step="0.01" name="area_acres"></div>
+    <div class="field"><label>Water</label><input type="text" name="water_source" placeholder="Borehole (Source Two)"></div>
+    <div class="field checkbox-row"><input type="checkbox" name="organic" id="org" checked><label for="org" style="margin:0;">Inside the certified organic area</label></div>
+    <div class="field"><label>Notes</label><input type="text" name="notes"></div>
+    <div><button class="btn" type="submit">Add block</button></div>
+  </form>
+</div>
+{% endif %}
+{% endblock %}

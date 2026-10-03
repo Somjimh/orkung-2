@@ -1,4 +1,4 @@
-# Orkung Livestock Manager
+# Orkung Farm Manager (livestock, crops, work, payroll, store, assets)
 
 A dedicated livestock record-keeping system for goats and sheep (with cattle
 and other species available when an administrator enables them). Built as a
@@ -137,6 +137,19 @@ a retained completion history; fourteen filterable, printable, CSV/Excel
 exportable reports; CSV import with a downloadable template and a
 preview/validate step before anything is committed; and a full audit log
 covering create/update/status-change/access-denied events.
+
+## Crops, daily work, payroll, store, assets, milestones (Oct 2026)
+
+- **Crops & Blocks** (`/crops`): field blocks (organic or not), plantings, harvests by grade, sales with item, grade, kilos, price per kilo and payments owed. A monthly view of labour and inputs per block and per crop, cost per kilo, and paid days with no job logged.
+- **Daily Sheet & Staff** (`/work`): one sheet a day: attendance, main job, block, output and hours for every member of staff, plus extra jobs. Each person's day cost is split across their jobs by hours.
+- **Payroll** (`/payroll`): monthly-salary and daily-rate staff, advances recovered from pay, a draft prepared by the manager and approved by the administrator. Approval freezes the month's sheets. Payments are recorded with an M-Pesa reference, and there are payslips and an Excel export. Pay is gross only: PAYE, SHIF, NSSF and Housing Levy are left to the accountant.
+- **Store** (`/stock`): medicines, crop chemicals, fertiliser, seed, feed, fuel. Every issue names the person who took it and the block or job it went to. Issuing a non-organic product to an organic block needs a confirmation. A chemical's pre-harvest interval blocks harvests on that block until it ends. There is a printable count sheet, and a losses report values any count shortfall at cost.
+- **Assets** (`/assets`): numbered assets (AST-0001), each with an answerable person, check-out and return, repairs, a walk-round verification sheet, and lost or written-off records.
+- **Milestones** (`/milestones`): the reset plan's gates loaded with one click, shown red, amber or green.
+- New **Storekeeper** role: store, assets, harvests and milestones, but no payroll.
+- On first start, an older database is upgraded in place. A full copy is kept next to it first (`orkung.db.before-roles-<timestamp>.bak`).
+
+Tests: `python3 tests/farm_test.py` (in-process, runs on a copy of `instance/orkung.db`).
 
 ## Offline / mobile
 

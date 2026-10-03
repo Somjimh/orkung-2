@@ -45,9 +45,77 @@ def init_db(app):
     cols = {r[1] for r in conn.execute("PRAGMA table_info(stock_batches)")}
     if cols and "price_per_pack" not in cols:
         conn.execute("ALTER TABLE stock_batches ADD COLUMN price_per_pack REAL")
+    _add_columns(conn, "stock_items", [("organic_ok", "INTEGER"), ("phi_days", "INTEGER"),
+                                       ("active_ingredient", "TEXT")])
+    _add_columns(conn, "stock_movements", [("block_id", "INTEGER REFERENCES crop_blocks(id)"),
+                                           ("planting_id", "INTEGER REFERENCES plantings(id)"),
+                                           ("worker_id", "INTEGER REFERENCES workers(id)"),
+                                           ("rate_note", "TEXT")])
     conn.commit()
     conn.close()
+    if not fresh:
+        try:
+            _upgrade_user_roles(app.config["DATABASE"])
+        except Exception as exc:  # never stop the site starting; the old roles keep working
+            app.logger.error("Storekeeper role upgrade skipped: %s", exc)
     return fresh
+
+
+def _add_columns(conn, table, columns):
+    have = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+    if not have:
+        return
+    for name, decl in columns:
+        if name not in have:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
+
+
+def _upgrade_user_roles(path):
+    """Older databases only allow five roles. Rebuild the users table (same rows,
+    same ids) so the storekeeper role can be saved. A copy of the whole database
+    file is kept next to it first, so nothing can be lost."""
+    import shutil
+    conn = sqlite3.connect(path)
+    sql = conn.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'").fetchone()
+    if not sql or "storekeeper" in sql[0]:
+        conn.close()
+        return
+    backup = f"{path}.before-roles-{datetime.now():%Y%m%d-%H%M%S}.bak"
+    conn.close()
+    shutil.copy2(path, backup)
+    conn = sqlite3.connect(path, isolation_level=None)
+    try:
+        conn.execute("PRAGMA foreign_keys=OFF")
+        baseline = len(conn.execute("PRAGMA foreign_key_check").fetchall())
+        conn.execute("BEGIN")
+        conn.execute("""CREATE TABLE users_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT NOT NULL UNIQUE,
+            password_hash TEXT NOT NULL,
+            full_name TEXT NOT NULL,
+            email TEXT,
+            role TEXT NOT NULL CHECK(role IN ('admin','manager','worker','viewer','vet','storekeeper')),
+            active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            last_login TEXT)""")
+        conn.execute("INSERT INTO users_new (id, username, password_hash, full_name, email, role, active, created_at, last_login) "
+                     "SELECT id, username, password_hash, full_name, email, role, active, created_at, last_login FROM users")
+        before = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+        after = conn.execute("SELECT COUNT(*) FROM users_new").fetchone()[0]
+        if before != after:
+            raise RuntimeError("user copy count mismatch")
+        conn.execute("DROP TABLE users")
+        conn.execute("ALTER TABLE users_new RENAME TO users")
+        problems = conn.execute("PRAGMA foreign_key_check").fetchall()
+        if len(problems) > baseline:
+            raise RuntimeError(f"foreign key problems after users upgrade: {problems[:5]}")
+        conn.execute("COMMIT")
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
+    finally:
+        conn.execute("PRAGMA foreign_keys=ON")
+        conn.close()
 
 
 def query(sql, args=(), one=False):

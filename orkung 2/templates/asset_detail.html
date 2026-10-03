@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}{{ a.asset_no }} {{ a.name }} - {{ app_name }}{% endblock %}
+{% block heading %}{{ a.asset_no }} · {{ a.name }}{% endblock %}
+{% block topbar_actions %}<a class="btn secondary" href="{{ url_for('assets.index') }}">All assets</a>{% endblock %}
+{% block content %}
+<div class="kpi-row grid cols-4 section">
+  <div class="stat-card"><div class="stat-label">Status</div><div class="stat-value" style="font-size:1.15rem;">{{ statuses[a.status] }}</div><div class="stat-sub">{{ a.location or 'no location' }}</div></div>
+  <div class="stat-card"><div class="stat-label">Answerable</div><div class="stat-value" style="font-size:1.15rem;">{{ a.custodian or '—' }}</div></div>
+  <div class="stat-card {{ 'red' if a.condition in ('needs_repair','broken') }}"><div class="stat-label">Condition</div><div class="stat-value" style="font-size:1.15rem;">{{ a.condition.replace('_',' ') }}</div><div class="stat-sub">last seen {{ a.last_verified or 'never' }}</div></div>
+  <div class="stat-card"><div class="stat-label">Cost / repairs (KES)</div><div class="stat-value" style="font-size:1.15rem;">{{ '{:,.0f}'.format(a.cost) if a.cost else '—' }}</div><div class="stat-sub">repairs and service {{ '{:,.0f}'.format(spend) }}</div></div>
+</div>
+
+{% if can_edit and a.status != 'disposed' %}
+<div class="card section"><h3>Record what happened</h3>
+  <form method="post" action="{{ url_for('assets.event', aid=a.id) }}" class="form-grid">
+    <div class="field"><label>What</label><select name="event_type">
+      {% if a.status != 'out' %}<option value="check_out">Check out to a person</option>{% else %}<option value="return">Returned to the store</option>{% endif %}
+      <option value="verified">Seen and verified</option><option value="repair">Repaired</option><option value="service">Serviced</option>
+      <option value="moved">Moved to a new place</option><option value="condition">Condition changed</option>
+      {% if a.status == 'lost' %}<option value="found">Found</option>{% else %}<option value="lost">Reported lost / missing</option>{% endif %}
+      {% if can_dispose %}<option value="disposed">Disposed / written off</option>{% endif %}</select></div>
+    <div class="field"><label>Date</label><input type="date" name="event_date" value="{{ today }}"></div>
+    <div class="field"><label>Person</label><select name="worker_id"><option value="">—</option>{% for w in workers %}<option value="{{ w.id }}">{{ w.name }}</option>{% endfor %}</select></div>
+    <div class="field"><label>Condition now</label><select name="condition"><option value="">no change</option>{% for v, t in conditions %}<option value="{{ v }}">{{ t }}</option>{% endfor %}</select></div>
+    <div class="field"><label>New location (if moved)</label><input type="text" name="location"></div>
+    <div class="field"><label>Cost (KES, repairs)</label><input type="number" step="1" name="cost"></div>
+    <div class="field" style="grid-column:1/-1;"><label>Notes</label><input type="text" name="notes" placeholder="what was done, by whom, why"></div>
+    <div><button class="btn" type="submit">Save</button></div>
+  </form></div>
+{% endif %}
+
+<div class="card section"><h3>History</h3>
+  {% if events %}<ul class="timeline">{% for e in events %}<li><div class="t-date">{{ e.event_date }}</div><div class="t-title">{{ labels.get(e.event_type, e.event_type) }}{% if e.worker %} · {{ e.worker }}{% endif %}{% if e.cost %} · KES {{ '{:,.0f}'.format(e.cost) }}{% endif %}</div>
+    <div class="small muted">{{ e.notes or '' }} {% if e.full_name %}(recorded by {{ e.full_name }}){% endif %}</div></li>{% endfor %}</ul>
+  {% else %}<p class="muted">No history yet.</p>{% endif %}</div>
+
+{% if can_edit %}
+<div class="card section"><h3>Details</h3>
+  <form method="post" action="{{ url_for('assets.edit', aid=a.id) }}" class="form-grid">
+    <div class="field"><label>Name</label><input type="text" name="name" value="{{ a.name }}"></div>
+    <div class="field"><label>Category</label><select name="category">{% for c in categories %}<option {{ 'selected' if a.category==c }}>{{ c }}</option>{% endfor %}</select></div>
+    <div class="field"><label>Serial / make</label><input type="text" name="serial_no" value="{{ a.serial_no or '' }}"></div>
+    <div class="field"><label>Quantity</label><input type="number" name="quantity" value="{{ a.quantity }}"></div>
+    <div class="field"><label>Bought on</label><input type="date" name="purchase_date" value="{{ a.purchase_date or '' }}"></div>
+    <div class="field"><label>Cost (KES)</label><input type="number" step="1" name="cost" value="{{ '%g'|format(a.cost) if a.cost else '' }}"></div>
+    <div class="field"><label>Answerable person</label><select name="custodian_id"><option value="">—</option>{% for w in workers %}<option value="{{ w.id }}" {{ 'selected' if a.custodian_id==w.id }}>{{ w.name }}</option>{% endfor %}</select></div>
+    <div class="field"><label>Notes</label><input type="text" name="notes" value="{{ a.notes or '' }}"></div>
+    <div><button class="btn secondary" type="submit">Save details</button></div>
+  </form></div>
+{% endif %}
+{% endblock %}

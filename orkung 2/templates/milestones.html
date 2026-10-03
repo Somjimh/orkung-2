@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Milestones - {{ app_name }}{% endblock %}
+{% block heading %}Milestones{% endblock %}
+{% block content %}
+<div class="kpi-row grid cols-5 section">
+  <div class="stat-card red"><div class="stat-label">Overdue</div><div class="stat-value">{{ counts.red }}</div></div>
+  <div class="stat-card amber"><div class="stat-label">Due soon / at risk</div><div class="stat-value">{{ counts.amber }}</div></div>
+  <div class="stat-card"><div class="stat-label">On track</div><div class="stat-value">{{ counts.green }}</div></div>
+  <div class="stat-card"><div class="stat-label">No date set</div><div class="stat-value">{{ counts.gray }}</div></div>
+  <div class="stat-card"><div class="stat-label">Done</div><div class="stat-value">{{ counts.done }}</div></div>
+</div>
+
+{% if can_edit and loaded < plan_size %}
+<div class="card section"><div class="btn-row" style="justify-content:space-between;">
+  <p style="margin:0;">Load the gates and targets from the reset plans (chillies, bananas, livestock, Sukoon Camp, compost, honey): {{ plan_size - loaded }} not loaded yet.</p>
+  <form method="post" action="{{ url_for('milestones.load_plan') }}"><button class="btn" type="submit">Load plan milestones</button></form></div></div>
+{% endif %}
+
+<div class="tabs">
+  <a href="{{ url_for('milestones.index', done='1' if show_done else None) }}" class="{{ 'active' if not ent }}">All</a>
+  {% for e in enterprises %}<a href="{{ url_for('milestones.index', enterprise=e, done='1' if show_done else None) }}" class="{{ 'active' if ent==e }}">{{ e }}</a>{% endfor %}
+</div>
+<p class="small"><a href="{{ url_for('milestones.index', enterprise=ent, done=None if show_done else '1') }}">{{ 'Hide done and dropped' if show_done else 'Show done and dropped too' }}</a></p>
+
+<div class="card section">
+  {% if items %}<div class="table-wrap"><table class="data"><thead><tr><th></th><th>Due</th><th>Enterprise</th><th>Milestone</th><th>Owner</th>{% if can_edit %}<th>Update</th>{% endif %}</tr></thead><tbody>
+  {% for m, r in items %}<tr>
+    <td data-label="Status"><span class="pill {{ r[0] }}">{{ r[1] }}</span></td>
+    <td data-label="Due">{{ m.due_date or '—' }}{% if m.done_date %}<div class="muted small">done {{ m.done_date }}</div>{% endif %}</td>
+    <td data-label="Enterprise">{{ m.enterprise }}</td>
+    <td data-label="Milestone"><strong>{{ m.title }}</strong>{% if m.detail %}<div class="muted small" style="white-space:pre-line;">{{ m.detail }}</div>{% endif %}</td>
+    <td data-label="Owner">{{ m.owner or '—' }}</td>
+    {% if can_edit %}<td data-label="Update"><form method="post" action="{{ url_for('milestones.update', mid=m.id) }}" style="display:grid;gap:.3rem;min-width:220px;">
+      <input type="hidden" name="ent" value="{{ ent or '' }}">
+      <div class="btn-row" style="flex-wrap:nowrap;"><select name="status" style="min-height:34px;padding:.3rem;">{% for v, t in [('open','Open'),('at_risk','At risk'),('done','Done'),('dropped','Dropped')] %}<option value="{{ v }}" {{ 'selected' if m.status==v }}>{{ t }}</option>{% endfor %}</select>
+        <input type="date" name="due_date" value="{{ m.due_date or '' }}" style="min-height:34px;padding:.3rem;"></div>
+      <div class="btn-row" style="flex-wrap:nowrap;"><input type="text" name="owner" value="{{ m.owner or '' }}" placeholder="owner" style="min-height:34px;padding:.3rem;">
+        <input type="text" name="note" placeholder="progress note" style="min-height:34px;padding:.3rem;"></div>
+      <button class="btn small subtle" type="submit">Save</button></form></td>{% endif %}
+  </tr>{% endfor %}</tbody></table></div>
+  {% else %}<p class="muted">No milestones here.</p>{% endif %}
+</div>
+
+{% if can_edit %}
+<div class="card section"><h3>Add a milestone</h3>
+  <form method="post" action="{{ url_for('milestones.add') }}" class="form-grid">
+    <div class="field"><label>Enterprise</label><select name="enterprise">{% for e in enterprises %}<option {{ 'selected' if ent==e }}>{{ e }}</option>{% endfor %}</select></div>
+    <div class="field"><label>Due</label><input type="date" name="due_date"></div>
+    <div class="field" style="grid-column:1/-1;"><label>Milestone *</label><input type="text" name="title" required placeholder="What must be true, and how we will know"></div>
+    <div class="field"><label>Owner</label><input type="text" name="owner"></div>
+    <div class="field"><label>Detail</label><input type="text" name="detail"></div>
+    <div><button class="btn" type="submit">Add</button></div>
+  </form></div>
+{% endif %}
+{% endblock %}

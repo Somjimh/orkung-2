@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Assets - {{ app_name }}{% endblock %}
+{% block heading %}Asset Register{% endblock %}
+{% block topbar_actions %}
+<a class="btn secondary" href="{{ url_for('assets.verify_sheet') }}">Walk-round sheet</a>
+<a class="btn secondary" href="{{ url_for('assets.index', status=status, category=category, export='xlsx') }}">Export Excel</a>
+{% endblock %}
+{% block content %}
+<div class="kpi-row grid cols-5 section">
+  <div class="stat-card"><div class="stat-label">Items</div><div class="stat-value">{{ kpi.count }}</div></div>
+  <div class="stat-card"><div class="stat-label">Cost recorded (KES)</div><div class="stat-value">{{ '{:,.0f}'.format(kpi.value) }}</div></div>
+  <div class="stat-card {{ 'amber' if out }}"><div class="stat-label">Out with people</div><div class="stat-value">{{ out|length }}</div></div>
+  <div class="stat-card {{ 'red' if kpi.repair or kpi.lost }}"><div class="stat-label">Repair / lost</div><div class="stat-value">{{ kpi.repair }} / {{ kpi.lost }}</div></div>
+  <div class="stat-card {{ 'amber' if kpi.stale }}"><div class="stat-label">Not seen in {{ verify_days }} days</div><div class="stat-value">{{ kpi.stale }}</div></div>
+</div>
+
+{% if out %}
+<div class="card section"><h3>Checked out now</h3>
+  <div class="table-wrap"><table class="data"><thead><tr><th>Asset</th><th>With</th><th>Since</th>{% if can_edit %}<th></th>{% endif %}</tr></thead><tbody>
+  {% for a, since in out %}<tr><td data-label="Asset"><a href="{{ url_for('assets.detail', aid=a.id) }}">{{ a.asset_no }} {{ a.name }}</a></td><td data-label="With">{{ a.custodian or '—' }}</td>
+    <td data-label="Since">{{ since or '—' }}{% if since and since < today %} <span class="pill amber">not returned</span>{% endif %}</td>
+    {% if can_edit %}<td data-label=""><form method="post" action="{{ url_for('assets.event', aid=a.id) }}"><input type="hidden" name="event_type" value="return"><input type="hidden" name="next" value="{{ url_for('assets.index') }}"><button class="btn small subtle" type="submit">Returned</button></form></td>{% endif %}</tr>{% endfor %}
+  </tbody></table></div></div>
+{% endif %}
+
+<form method="get" class="toolbar no-print">
+  <div class="field"><label>Category</label><select name="category"><option value="">All</option>{% for c in categories %}<option {{ 'selected' if category==c }}>{{ c }}</option>{% endfor %}</select></div>
+  <div class="field"><label>Status</label><select name="status"><option value="">All except disposed</option>{% for v, t in statuses %}<option value="{{ v }}" {{ 'selected' if status==v }}>{{ t }}</option>{% endfor %}</select></div>
+  <button class="btn subtle" type="submit">Filter</button>
+</form>
+<div class="card section">
+  {% if rows %}<div class="table-wrap"><table class="data"><thead><tr><th>No.</th><th>Asset</th><th>Category</th><th>Location</th><th>Answerable</th><th>Condition</th><th>Status</th><th>Last seen</th></tr></thead><tbody>
+  {% for a in rows %}<tr><td data-label="No.">{{ a.asset_no }}</td><td data-label="Asset"><a href="{{ url_for('assets.detail', aid=a.id) }}">{{ a.name }}</a>{% if a.quantity > 1 %} <span class="muted small">× {{ a.quantity }}</span>{% endif %}</td>
+    <td data-label="Category">{{ a.category }}</td><td data-label="Location">{{ a.location or '—' }}</td><td data-label="Answerable">{{ a.custodian or '—' }}</td>
+    <td data-label="Condition"><span class="pill {{ 'green' if a.condition=='good' else ('amber' if a.condition=='fair' else 'red') }}">{{ a.condition.replace('_',' ') }}</span></td>
+    <td data-label="Status">{{ a.status.replace('_',' ') }}</td>
+    <td data-label="Last seen">{% if not a.last_verified or a.last_verified < stale_before %}<span class="pill amber">{{ a.last_verified or 'never' }}</span>{% else %}{{ a.last_verified }}{% endif %}</td></tr>{% endfor %}
+  </tbody></table></div>{% else %}<p class="muted">No assets recorded yet. Start with the big items (pump, solar panels and inverter, tanks, drip lines, fence energiser), then the tools.</p>{% endif %}
+</div>
+
+{% if can_edit %}
+<div class="card section"><h3>Add an asset</h3>
+  <form method="post" action="{{ url_for('assets.add') }}" class="form-grid">
+    <div class="field"><label>Name *</label><input type="text" name="name" placeholder="e.g. Knapsack sprayer 16 L" required></div>
+    <div class="field"><label>Category</label><select name="category">{% for c in categories %}<option>{{ c }}</option>{% endfor %}</select></div>
+    <div class="field"><label>Quantity</label><input type="number" name="quantity" value="1" min="1"><div class="hint">Use 1 for anything valuable so each one has its own number.</div></div>
+    <div class="field"><label>Serial / make</label><input type="text" name="serial_no"></div>
+    <div class="field"><label>Location</label><input type="text" name="location" placeholder="Store, pump house, Block D, camp"></div>
+    <div class="field"><label>Answerable person</label><select name="custodian_id"><option value="">—</option>{% for w in workers %}<option value="{{ w.id }}">{{ w.name }}</option>{% endfor %}</select></div>
+    <div class="field"><label>Bought on</label><input type="date" name="purchase_date"></div>
+    <div class="field"><label>Cost (KES)</label><input type="number" step="1" name="cost"></div>
+    <div class="field"><label>Condition</label><select name="condition">{% for v, t in conditions %}<option value="{{ v }}">{{ t }}</option>{% endfor %}</select></div>
+    <div class="field"><label>Status</label><select name="status"><option value="in_use">In use</option><option value="in_store">In store</option></select></div>
+    <div class="field" style="grid-column:1/-1;"><label>Notes</label><input type="text" name="notes"></div>
+    <div><button class="btn" type="submit">Add asset</button></div>
+  </form></div>
+{% endif %}
+{% endblock %}

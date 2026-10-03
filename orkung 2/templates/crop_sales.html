@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% import "_farm.html" as f with context %}
+{% block title %}Crop Sales - {{ app_name }}{% endblock %}
+{% block heading %}Crop Sales{% endblock %}
+{% block topbar_actions %}<a class="btn secondary" href="{{ url_for('crops.sales', month=period, export='xlsx') }}">Export Excel</a>{% endblock %}
+{% block content %}
+{{ f.farm_tabs('sales') }}
+{% if can_edit %}
+<div class="card section">
+  <h3>Record a sale</h3>
+  <form method="post" class="form-grid">
+    <div class="field"><label>Date</label><input type="date" name="sale_date" value="{{ today }}"></div>
+    <div class="field"><label>Item *</label><select name="crop">{% for c in crops_list %}<option>{{ c }}</option>{% endfor %}<option>Dried cayenne pods</option><option>Cayenne powder</option><option>Hay bales</option><option>Compost</option></select></div>
+    <div class="field"><label>Grade</label><input type="text" name="grade" placeholder="e.g. Red A"></div>
+    <div class="field"><label>Kg (or bales / units) *</label><input type="number" step="0.1" name="kg" required></div>
+    <div class="field"><label>Price per kg (KES) *</label><input type="number" step="0.01" name="price_per_kg" required></div>
+    <div class="field"><label>Buyer</label><input type="text" name="buyer"></div>
+    <div class="field"><label>Receipt / invoice no.</label><input type="text" name="reference"></div>
+    <div class="field"><label>Paid now (KES)</label><input type="number" step="0.01" name="amount_paid" placeholder="leave blank if on credit"></div>
+    <div class="field" style="grid-column:1/-1;"><label>Notes</label><input type="text" name="notes"></div>
+    <div><button class="btn" type="submit">Save sale</button></div>
+  </form>
+</div>
+{% endif %}
+
+{% if unpaid %}
+<div class="card section"><h3>Not yet paid in full</h3>
+  <div class="table-wrap"><table class="data"><thead><tr><th>Date</th><th>Buyer</th><th>Item</th><th>Value</th><th>Paid</th><th>Balance</th>{% if can_edit %}<th>Record payment</th>{% endif %}</tr></thead><tbody>
+  {% for s in unpaid %}{% set v = s.kg * s.price_per_kg %}<tr><td data-label="Date">{{ s.sale_date }}</td><td data-label="Buyer">{{ s.buyer or '—' }}</td><td data-label="Item">{{ s.crop }} {{ '%g'|format(s.kg) }} kg</td>
+    <td data-label="Value">{{ '{:,.0f}'.format(v) }}</td><td data-label="Paid">{{ '{:,.0f}'.format(s.amount_paid) }}</td><td data-label="Balance"><span class="pill amber">{{ '{:,.0f}'.format(v - s.amount_paid) }}</span></td>
+    {% if can_edit %}<td data-label="Record payment"><form method="post" action="{{ url_for('crops.sale_payment', sid=s.id) }}" class="btn-row">
+      <input type="number" step="0.01" name="amount" value="{{ '%.0f'|format(v - s.amount_paid) }}" style="width:110px;min-height:34px;padding:.3rem;">
+      <input type="date" name="paid_date" value="{{ today }}" style="width:150px;min-height:34px;padding:.3rem;">
+      <input type="text" name="ref" placeholder="M-Pesa ref" style="width:120px;min-height:34px;padding:.3rem;">
+      <button class="btn small subtle" type="submit">Save</button></form></td>{% endif %}</tr>{% endfor %}
+  </tbody></table></div></div>
+{% endif %}
+
+{{ f.month_nav('crops.sales', label, prev, next) }}
+<div class="card section">
+  {% if rows %}<div class="table-wrap"><table class="data"><thead><tr><th>Date</th><th>Item</th><th>Grade</th><th>Kg</th><th>KES/kg</th><th>Value</th><th>Buyer</th><th>Paid</th></tr></thead><tbody>
+  {% for s in rows %}<tr><td data-label="Date">{{ s.sale_date }}</td><td data-label="Item">{{ s.crop }}</td><td data-label="Grade">{{ s.grade or '—' }}</td><td data-label="Kg">{{ '%g'|format(s.kg) }}</td>
+    <td data-label="KES/kg">{{ '%g'|format(s.price_per_kg) }}</td><td data-label="Value">{{ '{:,.0f}'.format(s.kg * s.price_per_kg) }}</td><td data-label="Buyer">{{ s.buyer or '—' }}</td>
+    <td data-label="Paid">{% if s.amount_paid >= s.kg * s.price_per_kg - 0.5 %}<span class="pill green">Paid</span>{% else %}<span class="pill amber">{{ '{:,.0f}'.format(s.amount_paid) }}</span>{% endif %}</td></tr>{% endfor %}
+  </tbody></table></div>
+  <p class="small muted" style="margin-top:.6rem;">Month total: {{ '{:,.0f}'.format(total_kg) }} kg, KES {{ '{:,.0f}'.format(total_value) }}, received KES {{ '{:,.0f}'.format(total_paid) }}.</p>
+  {% else %}<p class="muted">No sales in {{ label }}.</p>{% endif %}
+</div>
+{% endblock %}

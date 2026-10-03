@@ -10,7 +10,7 @@ from flask import session, redirect, url_for, request, g, abort, flash
 from werkzeug.security import check_password_hash
 import db
 
-ROLES = ["admin", "manager", "worker", "viewer", "vet"]
+ROLES = ["admin", "manager", "worker", "viewer", "vet", "storekeeper"]
 
 ROLE_LABELS = {
     "admin": "Administrator",
@@ -18,12 +18,22 @@ ROLE_LABELS = {
     "worker": "Farm worker",
     "viewer": "Viewer / Auditor",
     "vet": "Veterinary professional",
+    "storekeeper": "Storekeeper",
 }
 
 # Roles allowed to edit/create general animal & operational records
 STAFF = ("admin", "manager", "worker")
 # Roles allowed to make management-level decisions (edit core identity, delete, config)
 MANAGEMENT = ("admin", "manager")
+
+# Crops, work, payroll, store and assets
+CROP_EDIT = ("admin", "manager")                      # blocks, plantings, daily sheet, sales
+HARVEST_EDIT = ("admin", "manager", "worker", "storekeeper")
+PAY_VIEW = ("admin", "manager", "viewer")
+PAY_EDIT = ("admin", "manager")                       # draft pay runs, advances, staff rates
+PAY_APPROVE = ("admin",)                              # approve and lock a pay run
+STORE_EDIT = ("admin", "manager", "worker", "vet", "storekeeper")
+ASSET_EDIT = ("admin", "manager", "storekeeper")      # check out / return / verify / repair
 
 
 def load_logged_in_user():
@@ -81,16 +91,18 @@ def can_manage():
 # their own permissions server-side -- this only controls what is *offered*
 # in the navigation, per role, so people aren't shown links to pages they
 # can't use.
+FARM = {"crops", "work", "store", "assets", "milestones"}
 NAV_SECTIONS = {
     "admin":   {"dashboard", "animals", "add_animal", "weights", "breeding", "births",
-                "health", "groups", "movements", "tasks", "reports", "admin"},
+                "health", "groups", "movements", "tasks", "reports", "admin", "payroll"} | FARM,
     "manager": {"dashboard", "animals", "add_animal", "weights", "breeding", "births",
-                "health", "groups", "movements", "tasks", "reports"},
+                "health", "groups", "movements", "tasks", "reports", "payroll"} | FARM,
     "worker":  {"dashboard", "animals", "add_animal", "weights", "breeding", "births",
-                "health", "groups", "movements", "tasks", "reports"},
+                "health", "groups", "movements", "tasks", "reports", "crops", "store"},
     "viewer":  {"dashboard", "animals", "weights", "breeding", "births",
-                "health", "groups", "movements", "tasks", "reports"},
-    "vet":     {"dashboard", "animals", "health", "tasks", "reports"},
+                "health", "groups", "movements", "tasks", "reports", "payroll"} | FARM,
+    "vet":     {"dashboard", "animals", "health", "tasks", "reports", "store"},
+    "storekeeper": {"dashboard", "crops", "store", "assets", "milestones", "tasks", "reports"},
 }
 
 

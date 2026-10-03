@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% import "_farm.html" as f with context %}
+{% block title %}Block {{ b.code }} - {{ app_name }}{% endblock %}
+{% block heading %}Block {{ b.code }}{% if b.name != b.code %} · {{ b.name }}{% endif %}{% endblock %}
+{% block topbar_actions %}<a class="btn secondary" href="{{ url_for('crops.index', month=period) }}">All blocks</a>{% endblock %}
+{% block content %}
+{{ f.month_nav('crops.block', label, prev, next, {'block_id': b.id}) }}
+{% if hold %}<div class="flash error">Sprayed with {{ hold[1] }}. Do not harvest for sale before <strong>{{ hold[0] }}</strong>.</div>{% endif %}
+{% if not b.active %}<div class="flash info">This block is retired.</div>{% endif %}
+
+<div class="kpi-row grid cols-4 section">
+  <div class="stat-card"><div class="stat-label">Acres</div><div class="stat-value">{{ b.area_acres or '—' }}</div><div class="stat-sub">{{ 'Organic area' if b.organic else 'Not in the organic area' }}{% if b.water_source %} · {{ b.water_source }}{% endif %}</div></div>
+  <div class="stat-card"><div class="stat-label">Labour (KES)</div><div class="stat-value">{{ fmt(lab_cost) }}</div></div>
+  <div class="stat-card"><div class="stat-label">Inputs (KES)</div><div class="stat-value">{{ fmt(inp_cost) }}</div></div>
+  <div class="stat-card"><div class="stat-label">Harvest (kg)</div><div class="stat-value">{{ fmt(kg) }}</div>
+    <div class="stat-sub">{% if kg %}KES {{ '%.1f'|format((lab_cost + inp_cost) / kg) }} a kg{% endif %}</div></div>
+</div>
+
+<div class="card section">
+  <h3>Plantings</h3>
+  {% if plantings %}
+  <div class="table-wrap"><table class="data">
+    <thead><tr><th>Crop</th><th>Planted</th><th>Age</th><th>Plants</th><th>First harvest</th><th>Status</th>{% if can_edit %}<th>Update</th>{% endif %}</tr></thead>
+    <tbody>{% for p in plantings %}
+    <tr><td data-label="Crop">{{ p.crop }}{% if p.variety %} <span class="muted small">{{ p.variety }}</span>{% endif %}{% if p.area_acres %} <span class="muted small">{{ p.area_acres }} ac</span>{% endif %}</td>
+      <td data-label="Planted">{{ p.planted_date }}</td><td data-label="Age">{{ p.planted_date|age if p.status not in ('finished','failed') else ('ended ' ~ (p.end_date or '')) }}</td>
+      <td data-label="Plants">{{ p.plant_count or '—' }}</td><td data-label="First harvest">{{ p.first_harvest_date or '—' }}</td>
+      <td data-label="Status"><span class="pill {{ 'gray' if p.status in ('finished','failed') else 'green' }}">{{ p.status }}</span></td>
+      {% if can_edit %}<td data-label="Update">
+        <form method="post" action="{{ url_for('crops.update_planting', planting_id=p.id) }}" class="btn-row">
+          <select name="status" style="width:auto;min-height:34px;padding:.3rem;">{% for s in ['nursery','growing','harvesting','finished','failed'] %}<option {{ 'selected' if p.status==s }}>{{ s }}</option>{% endfor %}</select>
+          <input type="number" name="plant_count" placeholder="plants alive" style="width:120px;min-height:34px;padding:.3rem;">
+          <button class="btn small subtle" type="submit">Save</button></form></td>{% endif %}</tr>
+    {% endfor %}</tbody></table></div>
+  {% else %}<p class="muted">Nothing planted on this block yet.</p>{% endif %}
+  {% if can_edit %}
+  <hr class="divider">
+  <h3>Record a planting</h3>
+  <form method="post" action="{{ url_for('crops.add_planting') }}" class="form-grid">
+    <input type="hidden" name="block_id" value="{{ b.id }}">
+    <div class="field"><label>Crop *</label><select name="crop" required>{% for c in crops_list %}<option>{{ c }}</option>{% endfor %}</select></div>
+    <div class="field"><label>Variety</label><input type="text" name="variety" placeholder="e.g. Grand Nain, Red Savina"></div>
+    <div class="field"><label>Planted on *</label><input type="date" name="planted_date" value="{{ today }}" required></div>
+    <div class="field"><label>Expected first harvest</label><input type="date" name="first_harvest_date"></div>
+    <div class="field"><label>Plants</label><input type="number" name="plant_count"></div>
+    <div class="field"><label>Acres</label><input type="number" step="0.01" name="area_acres" value="{{ b.area_acres or '' }}"></div>
+    <div class="field"><label>Stage</label><select name="status"><option value="growing">Growing (in the field)</option><option value="nursery">Nursery</option></select></div>
+    <div class="field"><label>Notes</label><input type="text" name="notes" placeholder="seedling source, cost, spacing"></div>
+    <div><button class="btn" type="submit">Save planting</button></div>
+  </form>
+  {% endif %}
+</div>
+
+<div class="grid cols-2 section">
+  <div class="card"><h3>Work on this block, {{ label }}</h3>
+    {% if by_act %}<div class="table-wrap"><table class="data"><thead><tr><th>Job</th><th>Entries</th><th>Output</th><th>Cost (KES)</th></tr></thead><tbody>
+    {% for a, v in by_act.items() %}<tr><td data-label="Job">{{ a }}</td><td data-label="Entries">{{ v.entries }}</td>
+      <td data-label="Output">{% for u, q in v.qty.items() %}{{ '%g'|format(q) }} {{ u }} {% else %}—{% endfor %}</td><td data-label="Cost">{{ fmt(v.cost) }}</td></tr>{% endfor %}
+    </tbody></table></div>{% else %}<p class="muted small">No work logged on this block this month.</p>{% endif %}</div>
+  <div class="card"><h3>Store issues to this block</h3>
+    {% if inputs %}<div class="table-wrap"><table class="data"><thead><tr><th>Date</th><th>Item</th><th>Qty</th><th>To</th><th>KES</th></tr></thead><tbody>
+    {% for r in inputs %}<tr><td data-label="Date">{{ r.move_date }}</td><td data-label="Item">{{ r.item }}</td><td data-label="Qty">{{ '%g'|format(r.qty) }} {{ r.unit }}</td>
+      <td data-label="To">{{ r.worker or '—' }}</td><td data-label="KES">{{ fmt(r.cost) if r.priced else 'no price' }}</td></tr>{% endfor %}
+    </tbody></table></div>{% else %}<p class="muted small">Nothing issued from the store to this block this month.</p>{% endif %}</div>
+</div>
+
+<div class="card section"><h3>Harvests, {{ label }}</h3>
+  {% if harvests %}<div class="table-wrap"><table class="data"><thead><tr><th>Date</th><th>Crop</th><th>Grade</th><th>Kg</th><th>Notes</th></tr></thead><tbody>
+  {% for h in harvests %}<tr><td data-label="Date">{{ h.harvest_date }}</td><td data-label="Crop">{{ h.crop }}</td><td data-label="Grade">{{ h.grade or '—' }}</td><td data-label="Kg">{{ '%g'|format(h.kg) }}</td><td data-label="Notes">{{ h.notes or '' }}</td></tr>{% endfor %}
+  </tbody></table></div>{% else %}<p class="muted small">No harvest recorded this month.</p>{% endif %}
+</div>
+
+{% if can_edit %}
+<div class="card section"><h3>Block settings</h3>
+  <form method="post" action="{{ url_for('crops.edit_block', block_id=b.id) }}" class="form-grid">
+    <div class="field"><label>Name</label><input type="text" name="name" value="{{ b.name }}"></div>
+    <div class="field"><label>Acres</label><input type="number" step="0.01" name="area_acres" value="{{ b.area_acres or '' }}"></div>
+    <div class="field"><label>Water</label><input type="text" name="water_source" value="{{ b.water_source or '' }}"></div>
+    <div class="field"><label>Notes</label><input type="text" name="notes" value="{{ b.notes or '' }}"></div>
+    <div class="field checkbox-row"><input type="checkbox" name="organic" id="org" {{ 'checked' if b.organic }}><label for="org" style="margin:0;">Inside the certified organic area</label></div>
+    <div class="field checkbox-row"><input type="checkbox" name="retired" id="ret" {{ 'checked' if not b.active }}><label for="ret" style="margin:0;">Retired (no longer farmed)</label></div>
+    <div><button class="btn" type="submit">Save</button></div>
+  </form>
+</div>
+{% endif %}
+{% endblock %}

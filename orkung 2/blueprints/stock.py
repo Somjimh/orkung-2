@@ -1,5 +1,6 @@
-"""Medicine & supplies stock: what is on the shelf, what it cost, what is
-running low or expiring, and what each treatment used.
+"""Farm store: medicines, crop chemicals, fertiliser, seed, fuel and supplies.
+What is on the shelf, what it cost, what is running low or expiring, who took
+what and for which block, and what went missing at a count.
 
 Quantities are held in a base unit per item (ml, g or pcs). Treatments recorded
 on the site take stock off automatically (earliest expiry first) when the
@@ -11,10 +12,12 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 import db
 import helpers
 import auth
+import farm
 
 bp = Blueprint("stock", __name__, url_prefix="/stock")
 
-STOCK_STAFF = ("admin", "manager", "worker", "vet")
+STOCK_STAFF = auth.STORE_EDIT
+STORE_MANAGE = ("admin", "manager", "storekeeper")
 EXPIRY_WARN_DAYS = 90
 
 UNIT_MAP = {  # written unit -> (base unit, multiplier)
@@ -95,7 +98,8 @@ def find_item(name):
     return db.query("SELECT * FROM stock_items WHERE lower(name)=lower(?) AND active=1", (name.strip(),), one=True)
 
 
-def take_out(item, qty, when, move_type="used", treatment_id=None, notes=None, user=None):
+def take_out(item, qty, when, move_type="used", treatment_id=None, notes=None, user=None,
+             block_id=None, planting_id=None, worker_id=None):
     """Remove qty (base units) from an item's batches, earliest expiry first."""
     remaining = qty
     cost = unit_cost(item)
@@ -108,19 +112,21 @@ def take_out(item, qty, when, move_type="used", treatment_id=None, notes=None, u
         part = min(b["qty"], remaining)
         bcost = unit_cost(item, b)
         db.execute("UPDATE stock_batches SET qty=qty-? WHERE id=?", (part, b["id"]))
-        db.execute("INSERT INTO stock_movements (item_id, batch_id, move_date, move_type, qty, unit_cost, treatment_id, notes, created_by) "
-                   "VALUES (?,?,?,?,?,?,?,?,?)", (item["id"], b["id"], when, move_type, -part, bcost, treatment_id, notes,
-                                                   user["id"] if user else None))
+        db.execute("INSERT INTO stock_movements (item_id, batch_id, move_date, move_type, qty, unit_cost, treatment_id, notes, created_by, "
+                   "block_id, planting_id, worker_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                   (item["id"], b["id"], when, move_type, -part, bcost, treatment_id, notes,
+                    user["id"] if user else None, block_id, planting_id, worker_id))
         total_cost += part * (bcost or 0)
         remaining -= part
     if remaining > 1e-9:  # not enough on the shelf: record it so the shortfall shows
         last = db.query("SELECT id FROM stock_batches WHERE item_id=? ORDER BY id DESC LIMIT 1", (item["id"],), one=True)
         if last:
             db.execute("UPDATE stock_batches SET qty=qty-? WHERE id=?", (remaining, last["id"]))
-        db.execute("INSERT INTO stock_movements (item_id, batch_id, move_date, move_type, qty, unit_cost, treatment_id, notes, created_by) "
-                   "VALUES (?,?,?,?,?,?,?,?,?)", (item["id"], last["id"] if last else None, when, move_type, -remaining, cost,
-                                                   treatment_id, ((notes or "") + " | more used than was in stock: please count").strip(" |"),
-                                                   user["id"] if user else None))
+        db.execute("INSERT INTO stock_movements (item_id, batch_id, move_date, move_type, qty, unit_cost, treatment_id, notes, created_by, "
+                   "block_id, planting_id, worker_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                   (item["id"], last["id"] if last else None, when, move_type, -remaining, cost,
+                    treatment_id, ((notes or "") + " | more used than was in stock: please count").strip(" |"),
+                    user["id"] if user else None, block_id, planting_id, worker_id))
         total_cost += remaining * (cost or 0)
     return total_cost or None
 
@@ -143,8 +149,11 @@ def deduct_for_treatment(treatment_id, medicine_name, dose, dose_unit, when, use
     return None
 
 
-def _summary():
-    items = db.query("SELECT * FROM stock_items WHERE active=1 ORDER BY name")
+def _summary(category=None):
+    if category:
+        items = db.query("SELECT * FROM stock_items WHERE active=1 AND category=? ORDER BY name", (category,))
+    else:
+        items = db.query("SELECT * FROM stock_items WHERE active=1 ORDER BY category, name")
     today = date.today()
     warn = (today + timedelta(days=EXPIRY_WARN_DAYS)).isoformat()
     out = []
@@ -180,22 +189,24 @@ def _summary():
 @bp.route("")
 @auth.login_required
 def index():
-    rows = _summary()
+    cat = request.args.get("cat") or None
+    rows = _summary(cat)
+    counts = {r["category"]: r["c"] for r in db.query("SELECT category, COUNT(*) c FROM stock_items WHERE active=1 GROUP BY category")}
     total = sum(r["value"] or 0 for r in rows)
     unpriced = sum(1 for r in rows if r["item"]["price_per_pack"] is None)
     labels = lambda r: {f[1] for f in r["flags"]}
     n_low = sum(1 for r in rows if labels(r) & {"Low", "Out of stock", "Count needed"})
     n_exp = sum(1 for r in rows if labels(r) & {"Expired stock", "Expires soon"})
     return render_template("stock_index.html", rows=rows, total=total, unpriced=unpriced, n_low=n_low, n_exp=n_exp,
-                           warn_days=EXPIRY_WARN_DAYS,
-                           can_edit=g.user["role"] in STOCK_STAFF, can_manage=g.user["role"] in auth.MANAGEMENT,
+                           warn_days=EXPIRY_WARN_DAYS, cat=cat, counts=counts, categories=farm.STORE_CATEGORIES,
+                           can_edit=g.user["role"] in STOCK_STAFF, can_manage=g.user["role"] in STORE_MANAGE,
                            today=db.today_str())
 
 
 @bp.route("/report")
 @auth.login_required
 def report():
-    rows = _summary()
+    rows = _summary(request.args.get("cat") or None)
     header = ["Item", "Pack size", "On hand", "Packs (approx.)", "Price per pack (KES)", "Value (KES)",
               "Earliest expiry", "Used last 90 days", "Alerts"]
     data = [(r["item"]["name"], f"{r['item']['pack_size']:g} {r['item']['unit']}", f"{r['on_hand']:g} {r['item']['unit']}",
@@ -204,7 +215,7 @@ def report():
              ", ".join(f[1] for f in r["flags"])) for r in rows]
     total = sum(r["value"] or 0 for r in rows)
     from blueprints.reports import _out
-    return _out("Medicine Stock", header, data, "medicine_stock.csv",
+    return _out("Store stock", header, data, "store_stock.csv",
                 description=f"Total stock value KES {total:,.0f} (priced items only). Alerts: low, out of stock, expiring within "
                             f"{EXPIRY_WARN_DAYS} days, expired, damaged, no price.")
 
@@ -235,7 +246,8 @@ def item(item_id):
         abort(404)
     batches = db.query("SELECT * FROM stock_batches WHERE item_id=? ORDER BY qty<=0, expiry, id", (item_id,))
     moves = db.query(
-        "SELECT m.*, b.batch_no, u.full_name, a.tag_id, sp.name AS species FROM stock_movements m "
+        "SELECT m.*, b.batch_no, u.full_name, a.tag_id, sp.name AS species, cb.code AS block_code, w.name AS worker "
+        "FROM stock_movements m LEFT JOIN crop_blocks cb ON cb.id=m.block_id LEFT JOIN workers w ON w.id=m.worker_id "
         "LEFT JOIN stock_batches b ON b.id=m.batch_id LEFT JOIN users u ON u.id=m.created_by "
         "LEFT JOIN treatments t ON t.id=m.treatment_id LEFT JOIN animals a ON a.id=t.animal_id "
         "LEFT JOIN species sp ON sp.id=a.species_id WHERE m.item_id=? ORDER BY m.move_date DESC, m.id DESC LIMIT 300", (item_id,))
@@ -243,27 +255,30 @@ def item(item_id):
     return render_template("stock_item.html", it=it, batches=batches, moves=moves, medicines=medicines,
                            cost=unit_cost(it), on_hand=sum(b["qty"] for b in batches),
                            value=sum(b["qty"] * (unit_cost(it, b) or 0) for b in batches if b["qty"] > 0),
-                           can_edit=g.user["role"] in STOCK_STAFF, can_manage=g.user["role"] in auth.MANAGEMENT,
-                           today=db.today_str())
+                           can_edit=g.user["role"] in STOCK_STAFF, can_manage=g.user["role"] in STORE_MANAGE,
+                           blocks=farm.blocks(), workers=farm.workers(), categories=farm.STORE_CATEGORIES,
+                           crop_item=it["category"] in farm.CROP_CATEGORIES, today=db.today_str())
 
 
 @bp.route("/add", methods=["POST"])
 @auth.login_required
-@auth.require_roles(*auth.MANAGEMENT)
+@auth.require_roles(*STORE_MANAGE)
 def add_item():
     name = request.form.get("name", "").strip()
     size, unit = parse_amount(request.form.get("pack_size"))
     size_b, base = to_base(size, unit or request.form.get("unit"))
     if not name or not size_b:
         flash("Enter a name and a pack size with its unit, e.g. 100 ml, 1 L, 25 g, 10 pcs.", "error")
-        return redirect(url_for("stock.index"))
+        return redirect(url_for("stock.index", cat=request.form.get("category")))
     if find_item(name):
         flash("An item with that name already exists.", "error")
         return redirect(url_for("stock.index"))
-    new_id = db.execute("INSERT INTO stock_items (name, category, pack_size, unit, price_per_pack, reorder_level, notes) VALUES (?,?,?,?,?,?,?)",
+    new_id = db.execute("INSERT INTO stock_items (name, category, pack_size, unit, price_per_pack, reorder_level, notes, "
+                        "organic_ok, phi_days, active_ingredient) VALUES (?,?,?,?,?,?,?,?,?,?)",
                         (name, request.form.get("category", "medicine"), size_b, base,
                          request.form.get("price_per_pack", type=float), (request.form.get("reorder_packs", type=float) or 0) * size_b,
-                         request.form.get("notes")))
+                         request.form.get("notes"), 1 if request.form.get("organic_ok") else 0,
+                         request.form.get("phi_days", type=int), request.form.get("active_ingredient") or None))
     db.audit(g.user, "create", "stock_item", new_id, f"Added stock item {name}")
     flash("Item added. Now record a purchase or count to put stock on it.", "success")
     return redirect(url_for("stock.item", item_id=new_id))
@@ -271,16 +286,19 @@ def add_item():
 
 @bp.route("/<int:item_id>/edit", methods=["POST"])
 @auth.login_required
-@auth.require_roles(*auth.MANAGEMENT)
+@auth.require_roles(*STORE_MANAGE)
 def edit_item(item_id):
     it = db.query("SELECT * FROM stock_items WHERE id=?", (item_id,), one=True)
     if not it:
         abort(404)
     price = request.form.get("price_per_pack", type=float)
     reorder = request.form.get("reorder_packs", type=float)
-    db.execute("UPDATE stock_items SET price_per_pack=?, reorder_level=?, category=?, medicine_id=?, notes=? WHERE id=?",
+    db.execute("UPDATE stock_items SET price_per_pack=?, reorder_level=?, category=?, medicine_id=?, notes=?, "
+               "organic_ok=?, phi_days=?, active_ingredient=? WHERE id=?",
                (price, (reorder or 0) * it["pack_size"], request.form.get("category") or it["category"],
-                request.form.get("medicine_id", type=int) or None, request.form.get("notes"), item_id))
+                request.form.get("medicine_id", type=int) or None, request.form.get("notes"),
+                1 if request.form.get("organic_ok") else 0, request.form.get("phi_days", type=int),
+                request.form.get("active_ingredient") or None, item_id))
     db.audit(g.user, "update", "stock_item", item_id, f"Updated {it['name']}: price {price}, reorder {reorder} packs")
     flash("Saved.", "success")
     return redirect(url_for("stock.item", item_id=item_id))
@@ -335,3 +353,92 @@ def move(item_id):
         db.audit(g.user, "update", "stock_batch", bid, f"Count {it['name']} batch {b['batch_no']}: {b['qty']:g} -> {qty:g}")
         flash(f"Count saved. Difference {diff:+g} {it['unit']}.", "success")
     return redirect(url_for("stock.item", item_id=item_id))
+
+
+@bp.route("/<int:item_id>/issue", methods=["POST"])
+@auth.login_required
+@auth.require_roles(*STOCK_STAFF)
+def issue(item_id):
+    """Issue from the store to a named person, for a block or a job. Every issue is
+    signed for: who took it, how much, where it went, and the rate used."""
+    it = db.query("SELECT * FROM stock_items WHERE id=?", (item_id,), one=True)
+    if not it:
+        abort(404)
+    when = request.form.get("move_date") or db.today_str()
+    qty = (request.form.get("packs", type=float) or 0) * it["pack_size"] + (request.form.get("loose", type=float) or 0)
+    worker_id = request.form.get("worker_id", type=int)
+    block_id = request.form.get("block_id", type=int) or None
+    purpose = (request.form.get("purpose") or "").strip()
+    if qty <= 0 or not worker_id:
+        flash("Enter the amount and who took it. Every issue needs a name.", "error")
+        return redirect(url_for("stock.item", item_id=item_id))
+    if not block_id and not purpose:
+        flash("Say which block it went to, or what it was for.", "error")
+        return redirect(url_for("stock.item", item_id=item_id))
+    block = db.query("SELECT * FROM crop_blocks WHERE id=?", (block_id,), one=True) if block_id else None
+    flag = ""
+    if block and block["organic"] and it["category"] in ("chemical", "fertiliser", "seed") and not it["organic_ok"]:
+        if not request.form.get("confirm_organic"):
+            flash(f"Not issued: {it['name']} is not marked as allowed for organic use and block {block['code']} is in the "
+                  f"certified organic area. Check with the certifier first. If this is approved, tick the confirm box.", "error")
+            return redirect(url_for("stock.item", item_id=item_id))
+        flag = " | NOT ORGANIC-APPROVED, used on organic block (confirmed)"
+    on_hand = sum(b["qty"] for b in db.query("SELECT qty FROM stock_batches WHERE item_id=?", (item_id,)))
+    note = "; ".join(x for x in [purpose, request.form.get("rate_note") or ""] if x) + flag
+    take_out(it, qty, when, "used", None, note.strip(" |") or None, g.user, block_id=block_id,
+             planting_id=request.form.get("planting_id", type=int) or None, worker_id=worker_id)
+    w = db.query("SELECT name FROM workers WHERE id=?", (worker_id,), one=True)
+    db.audit(g.user, "create", "stock_issue", item_id,
+             f"Issued {qty:g} {it['unit']} {it['name']} to {w['name'] if w else worker_id}"
+             f"{' for block ' + block['code'] if block else ''}{flag}")
+    msg = f"Issued {qty:g} {it['unit']} of {it['name']} to {w['name'] if w else ''}."
+    if it["phi_days"] and block:
+        from datetime import date as _d, timedelta as _td
+        safe = (_d.fromisoformat(when[:10]) + _td(days=it["phi_days"])).isoformat()
+        msg += f" Block {block['code']} must not be harvested for sale before {safe}."
+    if qty > on_hand + 1e-9:
+        msg += " More was issued than the system shows on the shelf: please count this item."
+    flash(msg, "success" if qty <= on_hand + 1e-9 else "info")
+    return redirect(url_for("stock.item", item_id=item_id))
+
+
+@bp.route("/countsheet")
+@auth.login_required
+def countsheet():
+    """Printable stock-take sheet: what the system says should be on the shelf, with a blank to write the count."""
+    cat = request.args.get("cat") or None
+    rows = _summary(cat)
+    return render_template("stock_countsheet.html", rows=rows, cat=cat, categories=dict(farm.STORE_CATEGORIES),
+                           today=db.today_str())
+
+
+@bp.route("/losses")
+@auth.login_required
+def losses():
+    """Every count that found less (or more) than the records, and every disposal, valued at cost."""
+    m = request.args.get("month")
+    if m:
+        start, end = farm.month_bounds(m)
+    else:
+        start, end = "0000-01-01", "9999-12-31"
+    rows = db.query(
+        "SELECT m.move_date, m.move_type, m.qty, m.unit_cost, m.notes, i.name, i.unit, i.category, u.full_name "
+        "FROM stock_movements m JOIN stock_items i ON i.id=m.item_id LEFT JOIN users u ON u.id=m.created_by "
+        "WHERE m.move_type IN ('adjust','disposed') AND date(m.move_date) BETWEEN ? AND ? AND abs(m.qty) > 1e-9 "
+        "ORDER BY m.move_date DESC", (start, end))
+    header = ["Date", "Item", "Category", "Type", "Quantity", "Value (KES)", "Recorded by", "Notes"]
+    data = []
+    missing = found = 0.0
+    for r in rows:
+        val = r["qty"] * (r["unit_cost"] or 0)
+        if r["move_type"] == "adjust" and r["qty"] < 0 or r["move_type"] == "disposed":
+            missing += -val
+        elif r["move_type"] == "adjust":
+            found += val
+        data.append((r["move_date"][:10], r["name"], r["category"],
+                     "Count short" if r["move_type"] == "adjust" and r["qty"] < 0 else ("Count over" if r["move_type"] == "adjust" else "Disposed"),
+                     f"{r['qty']:+g} {r['unit']}", f"{val:,.0f}" if r["unit_cost"] else "no price", r["full_name"] or "", r["notes"] or ""))
+    from blueprints.reports import _out
+    return _out("Store losses and count differences", header, data, "store_losses.csv",
+                description=f"Missing at counts plus disposals: KES {missing:,.0f}. Found over: KES {found:,.0f}. "
+                            f"A shortfall at a count is stock that left the store without a record.")

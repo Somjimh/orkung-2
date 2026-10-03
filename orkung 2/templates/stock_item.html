@@ -1,7 +1,7 @@
 {% extends "base.html" %}
-{% block title %}{{ it.name }} - Medicine Stock - {{ app_name }}{% endblock %}
+{% block title %}{{ it.name }} - Store - {{ app_name }}{% endblock %}
 {% block heading %}{{ it.name }}{% endblock %}
-{% block topbar_actions %}<a class="btn secondary" href="{{ url_for('stock.index') }}">All stock</a>{% endblock %}
+{% block topbar_actions %}<a class="btn secondary" href="{{ url_for('stock.index', cat=it.category) }}">Back to store</a>{% endblock %}
 {% block content %}
 <div class="kpi-row grid cols-4 section">
   <div class="stat-card"><div class="stat-label">On hand</div><div class="stat-value">{{ '%g'|format(on_hand) }} {{ it.unit }}</div>
@@ -31,6 +31,24 @@
 </div>
 
 {% if can_edit %}
+<div class="card section">
+  <h3>Issue from the store</h3>
+  <p class="small muted">Who took it, how much, and where it went. {% if it.phi_days %}Spraying a block with this item stops harvest for sale on that block for {{ it.phi_days }} days.{% endif %}
+    {% if crop_item and not it.organic_ok %}<strong>Not marked as allowed for organic use:</strong> issuing to an organic block needs a confirmation.{% endif %}</p>
+  <form method="post" action="{{ url_for('stock.issue', item_id=it.id) }}" class="form-grid">
+    <div class="field"><label>Date</label><input type="date" name="move_date" value="{{ today }}"></div>
+    <div class="field"><label>Taken by *</label><select name="worker_id" required><option value="">—</option>{% for w in workers %}<option value="{{ w.id }}">{{ w.name }}</option>{% endfor %}</select>
+      {% if not workers %}<div class="hint">Add staff on the Staff page first.</div>{% endif %}</div>
+    <div class="field"><label>Full packs ({{ '%g'|format(it.pack_size) }} {{ it.unit }})</label><input type="number" step="0.01" name="packs"></div>
+    <div class="field"><label>Loose amount ({{ it.unit }})</label><input type="number" step="0.01" name="loose"></div>
+    <div class="field"><label>Block</label><select name="block_id"><option value="">— not for a block —</option>{% for b in blocks %}<option value="{{ b.id }}">{{ b.code }}{{ ' (organic)' if b.organic }}</option>{% endfor %}</select></div>
+    <div class="field"><label>For (if not a block)</label><input type="text" name="purpose" placeholder="e.g. generator, motorbike, nursery, camp"></div>
+    <div class="field" style="grid-column:1/-1;"><label>Rate / how used</label><input type="text" name="rate_note" placeholder="e.g. 20 ml per 20 L knapsack, 6 knapsacks"></div>
+    {% if crop_item and not it.organic_ok %}<div class="field checkbox-row" style="grid-column:1/-1;"><input type="checkbox" name="confirm_organic" id="corg"><label for="corg" style="margin:0;">The certifier has allowed this item on the organic block (or the block is the separate conventional block)</label></div>{% endif %}
+    <div><button class="btn" type="submit">Issue</button></div>
+  </form>
+</div>
+
 <div class="grid cols-2 section">
   <div class="card">
     <h3>Record a purchase</h3>
@@ -50,7 +68,7 @@
     <h3>Use, dispose or count</h3>
     <form method="post" action="{{ url_for('stock.move', item_id=it.id) }}" class="form-grid">
       <div class="field"><label>What</label><select name="kind">
-        <option value="used">Used (not through a treatment record)</option>
+        <option value="used">Used, no person or block (medicines)</option>
         <option value="disposed">Disposed (expired / damaged)</option>
         <option value="count">Count: set a batch to what is on the shelf</option></select></div>
       <div class="field"><label>Date</label><input type="date" name="move_date" value="{{ today }}"></div>
@@ -70,7 +88,10 @@
   <form method="post" action="{{ url_for('stock.edit_item', item_id=it.id) }}" class="form-grid">
     <div class="field"><label>Price per pack (KES)</label><input type="number" step="0.01" name="price_per_pack" value="{{ it.price_per_pack or '' }}"></div>
     <div class="field"><label>Reorder when below (packs)</label><input type="number" step="0.1" name="reorder_packs" value="{{ '%g'|format(it.reorder_level / it.pack_size) if it.reorder_level else '' }}"></div>
-    <div class="field"><label>Category</label><select name="category">{% for c in ['medicine','vaccine','supply'] %}<option value="{{ c }}" {{ 'selected' if it.category==c }}>{{ c|capitalize }}</option>{% endfor %}</select></div>
+    <div class="field"><label>Category</label><select name="category">{% for c, t in categories %}<option value="{{ c }}" {{ 'selected' if it.category==c }}>{{ t }}</option>{% endfor %}</select></div>
+    <div class="field"><label>Active ingredient</label><input type="text" name="active_ingredient" value="{{ it.active_ingredient or '' }}"></div>
+    <div class="field"><label>Pre-harvest interval (days)</label><input type="number" name="phi_days" value="{{ it.phi_days or '' }}"></div>
+    <div class="field checkbox-row"><input type="checkbox" name="organic_ok" id="orgok" {{ 'checked' if it.organic_ok }}><label for="orgok" style="margin:0;">Allowed for organic use (certifier approved)</label></div>
     <div class="field"><label>Medicine catalogue entry (for withdrawal days)</label><select name="medicine_id"><option value="">—</option>{% for m in medicines %}<option value="{{ m.id }}" {{ 'selected' if it.medicine_id==m.id }}>{{ m.name }}</option>{% endfor %}</select></div>
     <div class="field" style="grid-column:1/-1;"><label>Notes</label><input type="text" name="notes" value="{{ it.notes or '' }}"></div>
     <div><button class="btn" type="submit">Save settings</button></div>
@@ -82,15 +103,16 @@
   <h3>History</h3>
   {% if moves %}
   <div class="table-wrap"><table class="data">
-    <thead><tr><th>Date</th><th>Type</th><th>Quantity</th><th>Cost (KES)</th><th>Batch</th><th>Animal</th><th>Notes</th><th>By</th></tr></thead>
+    <thead><tr><th>Date</th><th>Type</th><th>Quantity</th><th>Cost (KES)</th><th>Batch</th><th>Taken by</th><th>Block / animal</th><th>Notes</th><th>Recorded by</th></tr></thead>
     <tbody>{% for m in moves %}
     <tr>
       <td data-label="Date">{{ m.move_date[:10] }}</td>
-      <td data-label="Type">{{ m.move_type|capitalize }}</td>
+      <td data-label="Type">{{ 'Issued' if m.move_type=='used' and m.worker else ('Count difference' if m.move_type=='adjust' else m.move_type|capitalize) }}</td>
       <td data-label="Quantity">{{ '%+g'|format(m.qty) if m.move_type != 'count' else '%g'|format(m.qty) }} {{ it.unit }}</td>
       <td data-label="Cost">{{ '{:,.0f}'.format((m.qty|abs) * m.unit_cost) if m.unit_cost else '—' }}</td>
       <td data-label="Batch">{{ m.batch_no or '—' }}</td>
-      <td data-label="Animal">{{ (m.species ~ ' ' ~ m.tag_id) if m.tag_id else '—' }}</td>
+      <td data-label="Taken by">{{ m.worker or '—' }}</td>
+      <td data-label="Block / animal">{{ m.block_code or ((m.species ~ ' ' ~ m.tag_id) if m.tag_id else '—') }}</td>
       <td data-label="Notes">{{ m.notes or '' }}</td>
       <td data-label="By">{{ m.full_name or '' }}</td>
     </tr>{% endfor %}</tbody>

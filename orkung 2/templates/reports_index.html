@@ -18,10 +18,22 @@
     ('reports.group_membership', 'Group membership', 'Historical and current group assignments.'),
     ('reports.by_site', 'Animals by site', 'Every animal grouped by current site.'),
     ('reports.incomplete', 'Incomplete records', 'Active animals missing key fields.'),
-    ('stock.report', 'Medicine stock', 'Stock on hand, value, expiry and low-stock alerts.'),
+    ('stock.report', 'Store stock', 'Stock on hand, value, expiry and low-stock alerts.'),
+    ('stock.losses', 'Store losses', 'Count shortfalls and disposals, valued at cost.'),
     ('stock.usage', 'Medicine usage & cost', 'What each treatment used and what it cost.'),
     ('reports.tasks_report', 'Tasks & alerts', 'Open tasks and flags, most urgent first, ready to print.'),
   ] %}
+  {% if current_user.role != 'vet' %}{% set reports = reports + [
+    ('crops.report_inputs', 'Store issues', 'Who took what from the store, for which block, this month.'),
+    ('crops.report_blocks', 'Block costs', 'Labour and inputs per block, cost per kg harvested.'),
+    ('crops.harvests', 'Harvests', 'Kilos picked by block, crop and grade.')] %}{% endif %}
+  {% if current_user.role in ('admin','manager','viewer','storekeeper') %}{% set reports = reports + [
+    ('crops.report_crops', 'Crop margins', 'Sales against labour and inputs, per crop, per month.'),
+    ('crops.sales', 'Crop sales', 'Every sale: item, grade, kilos, price per kilo, paid or owed.'),
+    ('assets.index', 'Asset register', 'Every asset, where it is and who answers for it.')] %}{% endif %}
+  {% if current_user.role in ('admin','manager','viewer') %}{% set reports = reports + [
+    ('work.log', 'Work log and labour cost', 'Who did what, where, and the pay behind it.'),
+    ('payroll.index', 'Payroll', 'Monthly pay runs, advances and payslips.')] %}{% endif %}
   {% for endpoint, title, desc in reports %}
   <a class="card link" href="{{ url_for(endpoint) }}" style="display:block;">
     <h3>{{ title }}</h3><p class="small muted" style="margin:0;">{{ desc }}</p>

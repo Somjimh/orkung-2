@@ -1,11 +1,17 @@
 {% extends "base.html" %}
-{% block title %}Medicine Stock - {{ app_name }}{% endblock %}
-{% block heading %}Medicine Stock{% endblock %}
+{% block title %}Store - {{ app_name }}{% endblock %}
+{% block heading %}Store{% endblock %}
 {% block topbar_actions %}
-<a class="btn secondary" href="{{ url_for('stock.report') }}">Print stock report</a>
-<a class="btn secondary" href="{{ url_for('stock.usage') }}">Usage &amp; cost</a>
+<a class="btn secondary" href="{{ url_for('stock.countsheet', cat=cat) }}">Count sheet</a>
+<a class="btn secondary" href="{{ url_for('stock.report') }}">Stock report</a>
+<a class="btn secondary" href="{{ url_for('stock.losses') }}">Losses</a>
+<a class="btn secondary" href="{{ url_for('stock.usage') }}">Medicine usage</a>
 {% endblock %}
 {% block content %}
+<div class="tabs">
+  <a href="{{ url_for('stock.index') }}" class="{{ 'active' if not cat }}">Everything</a>
+  {% for c, t in categories %}{% if counts.get(c) or c in ('chemical','fertiliser','seed','fuel') %}<a href="{{ url_for('stock.index', cat=c) }}" class="{{ 'active' if cat==c }}">{{ t }} <span class="muted">{{ counts.get(c, 0) }}</span></a>{% endif %}{% endfor %}
+</div>
 <div class="kpi-row grid cols-4 section">
   <div class="stat-card"><div class="stat-label">Items in stock list</div><div class="stat-value">{{ rows|length }}</div></div>
   <div class="stat-card"><div class="stat-label">Stock value (KES)</div><div class="stat-value">{{ '{:,.0f}'.format(total) }}</div>{% if unpriced %}<div class="stat-sub">{{ unpriced }} item(s) have no price yet</div>{% endif %}</div>
@@ -14,14 +20,15 @@
 </div>
 
 <div class="card section">
-  <p class="small muted">Stock goes down by itself when a treatment is recorded with a medicine whose name matches an item here and a dose in the same unit (ml, g or pcs). Open an item to record a purchase, a count, use or disposal, and to set its price and reorder level.</p>
+  <p class="small muted">Open an item to record a purchase, to issue it to a person for a block or job, to count it, or to dispose of it. Every issue carries a name, so what leaves the store is signed for. Medicines also come off by themselves when a treatment is recorded with a matching name and unit.</p>
   {% if rows %}
   <div class="table-wrap"><table class="data">
-    <thead><tr><th>Item</th><th>Pack</th><th>On hand</th><th>Price / pack (KES)</th><th>Value (KES)</th><th>Earliest expiry</th><th>Alerts</th></tr></thead>
+    <thead><tr><th>Item</th>{% if not cat %}<th>Type</th>{% endif %}<th>Pack</th><th>On hand</th><th>Price / pack (KES)</th><th>Value (KES)</th><th>Earliest expiry</th><th>Alerts</th></tr></thead>
     <tbody>
     {% for r in rows %}
     <tr>
-      <td data-label="Item"><a href="{{ url_for('stock.item', item_id=r.item.id) }}">{{ r.item.name }}</a></td>
+      <td data-label="Item"><a href="{{ url_for('stock.item', item_id=r.item.id) }}">{{ r.item.name }}</a>{% if r.item.category in ('chemical','fertiliser','seed') %} {% if r.item.organic_ok %}<span class="pill green">organic OK</span>{% else %}<span class="pill gray">not organic</span>{% endif %}{% endif %}{% if r.item.phi_days %} <span class="muted small">PHI {{ r.item.phi_days }} d</span>{% endif %}</td>
+      {% if not cat %}<td data-label="Type">{{ r.item.category }}</td>{% endif %}
       <td data-label="Pack">{{ '%g'|format(r.item.pack_size) }} {{ r.item.unit }}</td>
       <td data-label="On hand">{{ '%g'|format(r.on_hand) }} {{ r.item.unit }}{% if r.packs is not none %} <span class="muted small">({{ '%.1f'|format(r.packs) }} packs)</span>{% endif %}</td>
       <td data-label="Price / pack">{{ '{:,.0f}'.format(r.item.price_per_pack) if r.item.price_per_pack else '—' }}</td>
@@ -33,7 +40,7 @@
     </tbody>
   </table></div>
   {% else %}
-  <p class="muted">No stock items yet. Upload your stores count sheet under Users &amp; Settings &rarr; Import records &rarr; Medicine stock count, or add an item below.</p>
+  <p class="muted">No items here yet. Add an item below, then record a purchase or a count to put stock on it.</p>
   {% endif %}
 </div>
 
@@ -42,8 +49,11 @@
   <h3>Add a stock item</h3>
   <form method="post" action="{{ url_for('stock.add_item') }}" class="form-grid">
     <div class="field"><label>Name (as on label) *</label><input type="text" name="name" required></div>
-    <div class="field"><label>Pack size *</label><input type="text" name="pack_size" placeholder="e.g. 100 ml, 1 L, 25 g, 10 pcs" required></div>
-    <div class="field"><label>Category</label><select name="category"><option value="medicine">Medicine</option><option value="vaccine">Vaccine</option><option value="supply">Supply</option></select></div>
+    <div class="field"><label>Pack size *</label><input type="text" name="pack_size" placeholder="e.g. 1 L, 50 kg, 20 L, 10 pcs" required></div>
+    <div class="field"><label>Category</label><select name="category">{% for c, t in categories %}<option value="{{ c }}" {{ 'selected' if cat==c }}>{{ t }}</option>{% endfor %}</select></div>
+    <div class="field"><label>Active ingredient (chemicals)</label><input type="text" name="active_ingredient" placeholder="e.g. Abamectin 18 g/L"></div>
+    <div class="field"><label>Pre-harvest interval (days)</label><input type="number" name="phi_days" placeholder="from the label"><div class="hint">Days after spraying before the crop can be harvested.</div></div>
+    <div class="field checkbox-row"><input type="checkbox" name="organic_ok" id="orgok"><label for="orgok" style="margin:0;">Allowed for organic use (certifier approved)</label></div>
     <div class="field"><label>Price per pack (KES)</label><input type="number" step="0.01" name="price_per_pack"></div>
     <div class="field"><label>Reorder when below (packs)</label><input type="number" step="0.1" name="reorder_packs" value="1"></div>
     <div class="field"><label>Notes</label><input type="text" name="notes"></div>

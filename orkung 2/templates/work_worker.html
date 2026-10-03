@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% import "_farm.html" as f with context %}
+{% block title %}{{ w.name }} - {{ app_name }}{% endblock %}
+{% block heading %}{{ w.name }}{% endblock %}
+{% block topbar_actions %}<a class="btn secondary" href="{{ url_for('work.workers') }}">All staff</a>{% endblock %}
+{% block content %}
+<div class="kpi-row grid cols-4 section">
+  <div class="stat-card"><div class="stat-label">Job</div><div class="stat-value" style="font-size:1.15rem;">{{ w.job_title or '—' }}</div><div class="stat-sub">{{ w.phone or '' }}</div></div>
+  <div class="stat-card"><div class="stat-label">Pay</div><div class="stat-value" style="font-size:1.15rem;">{{ 'KES {:,.0f} a month'.format(w.monthly_salary or 0) if w.pay_type=='monthly' else 'KES {:,.0f} a day'.format(w.daily_rate or 0) }}</div><div class="stat-sub">gross</div></div>
+  <div class="stat-card {{ 'amber' if owed > 0 }}"><div class="stat-label">Advances owed</div><div class="stat-value">{{ '{:,.0f}'.format(owed) }}</div></div>
+  <div class="stat-card"><div class="stat-label">Since</div><div class="stat-value" style="font-size:1.15rem;">{{ w.start_date or '—' }}</div><div class="stat-sub">{{ ('left ' ~ w.end_date) if w.end_date else 'current' }}</div></div>
+</div>
+
+{{ f.month_nav('work.worker', label, prev, next, {'wid': w.id}) }}
+<div class="card section"><h3>Days and jobs</h3>
+  <div class="table-wrap"><table class="data"><thead><tr><th>Date</th><th>Attendance</th><th>Jobs</th></tr></thead><tbody>
+  {% for d, a, jobs in cal %}{% if a or jobs %}<tr><td data-label="Date">{{ d.strftime('%a %d') }}</td>
+    <td data-label="Attendance">{% if a %}<span class="pill {{ 'green' if a.status=='present' else ('amber' if a.status in ('half','sick','leave') else ('red' if a.status=='absent' else 'gray')) }}">{{ att_label[a.status] }}</span>{% else %}<span class="pill gray">not marked</span>{% endif %}</td>
+    <td data-label="Jobs">{% for j in jobs %}{{ j.activity }}{% if j.code %} ({{ j.code }}){% endif %}{% if j.quantity %} · {{ '%g'|format(j.quantity) }} {{ j.unit or '' }}{% endif %}{% if not loop.last %}; {% endif %}{% else %}{% if a and a.status in ('present','half') %}<span class="pill red">no job recorded</span>{% else %}—{% endif %}{% endfor %}</td></tr>{% endif %}{% endfor %}
+  </tbody></table></div></div>
+
+<div class="grid cols-2 section">
+  <div class="card"><h3>Advances</h3>
+    {% if advances %}<div class="table-wrap"><table class="data"><thead><tr><th>Date</th><th>KES</th><th>Reason</th></tr></thead><tbody>
+    {% for a in advances %}<tr><td data-label="Date">{{ a.advance_date }}</td><td data-label="KES">{{ '{:,.0f}'.format(a.amount) }}</td><td data-label="Reason">{{ a.reason or '' }}</td></tr>{% endfor %}
+    </tbody></table></div>{% else %}<p class="muted small">No advances.</p>{% endif %}</div>
+  <div class="card"><h3>Pay history</h3>
+    {% if lines %}<div class="table-wrap"><table class="data"><thead><tr><th>Month</th><th>Gross</th><th>Advances</th><th>Net</th><th>Status</th></tr></thead><tbody>
+    {% for l in lines %}<tr><td data-label="Month"><a href="{{ url_for('payroll.slip', period=l.period, wid=w.id) }}">{{ l.period }}</a></td><td data-label="Gross">{{ '{:,.0f}'.format(l.gross) }}</td>
+      <td data-label="Advances">{{ '{:,.0f}'.format(l.advances) }}</td><td data-label="Net">{{ '{:,.0f}'.format(l.net) }}</td><td data-label="Status">{{ 'paid ' ~ l.paid_date if l.paid_date else l.run_status }}</td></tr>{% endfor %}
+    </tbody></table></div>{% else %}<p class="muted small">No pay runs yet.</p>{% endif %}</div>
+</div>
+
+{% if assets %}<div class="card section"><h3>Assets this person answers for</h3>
+  {% for a in assets %}<p class="small"><a href="{{ url_for('assets.detail', aid=a.id) }}">{{ a.asset_no }} {{ a.name }}</a> · {{ a.status.replace('_',' ') }}</p>{% endfor %}</div>{% endif %}
+
+{% if can_edit %}
+<div class="card section"><h3>Edit details</h3>
+  <form method="post" class="form-grid">
+    <div class="field"><label>Name</label><input type="text" name="name" value="{{ w.name }}"></div>
+    <div class="field"><label>Phone / M-Pesa</label><input type="text" name="phone" value="{{ w.phone or '' }}"></div>
+    <div class="field"><label>Job</label><input type="text" name="job_title" value="{{ w.job_title or '' }}"></div>
+    <div class="field"><label>How paid</label><select name="pay_type"><option value="monthly" {{ 'selected' if w.pay_type=='monthly' }}>Monthly salary</option><option value="daily" {{ 'selected' if w.pay_type=='daily' }}>Daily rate (casual)</option></select></div>
+    <div class="field"><label>Monthly salary (KES)</label><input type="number" name="monthly_salary" value="{{ '%g'|format(w.monthly_salary) if w.monthly_salary else '' }}"></div>
+    <div class="field"><label>Daily rate (KES)</label><input type="number" name="daily_rate" value="{{ '%g'|format(w.daily_rate) if w.daily_rate else '' }}"></div>
+    <div class="field"><label>Started</label><input type="date" name="start_date" value="{{ w.start_date or '' }}"></div>
+    <div class="field"><label>Left on (removes from the daily sheet)</label><input type="date" name="end_date" value="{{ w.end_date or '' }}"></div>
+    <div class="field" style="grid-column:1/-1;"><label>Notes</label><input type="text" name="notes" value="{{ w.notes or '' }}"></div>
+    <div><button class="btn" type="submit">Save</button></div>
+  </form>
+  <p class="small muted">Rate changes are recorded in the audit history with the old and new figure.</p>
+</div>
+{% endif %}
+{% endblock %}

@@ -31,7 +31,7 @@ def create_app(config_object=Config):
             pending_tasks = row["c"] if row else 0
         nav = auth.visible_sections(g.user["role"]) if g.get("user") else set()
         return dict(current_user=g.get("user"), role_labels=auth.ROLE_LABELS,
-                    pending_tasks=pending_tasks, app_name="Orkung Livestock Manager", nav=nav)
+                    pending_tasks=pending_tasks, app_name="Orkung Farm Manager", nav=nav)
 
     # Jinja helpers
     app.jinja_env.filters["age"] = db.age_display
@@ -75,6 +75,11 @@ def create_app(config_object=Config):
     from blueprints.admin import bp as admin_bp
     from blueprints.records_import import bp as records_import_bp
     from blueprints.stock import bp as stock_bp
+    from blueprints.crops import bp as crops_bp
+    from blueprints.work import bp as work_bp
+    from blueprints.payroll import bp as payroll_bp
+    from blueprints.assets import bp as assets_bp
+    from blueprints.milestones import bp as milestones_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
@@ -88,6 +93,11 @@ def create_app(config_object=Config):
     app.register_blueprint(admin_bp)
     app.register_blueprint(records_import_bp)
     app.register_blueprint(stock_bp)
+    app.register_blueprint(crops_bp)
+    app.register_blueprint(work_bp)
+    app.register_blueprint(payroll_bp)
+    app.register_blueprint(assets_bp)
+    app.register_blueprint(milestones_bp)
 
     return app
 

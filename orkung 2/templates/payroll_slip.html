@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Payslip {{ l.name }} {{ r.period }} - {{ app_name }}{% endblock %}
+{% block heading %}Payslip{% endblock %}
+{% block topbar_actions %}<a class="btn secondary" href="{{ url_for('payroll.run', period=r.period) }}">Back to pay run</a>
+<button class="btn" type="button" onclick="window.print()">Print</button>{% endblock %}
+{% block content %}
+<div class="card section" style="max-width:640px;">
+  <div class="btn-row" style="justify-content:space-between;align-items:flex-start;">
+    <div><h2 style="margin:0;">Orkung Organic Farm Limited</h2><div class="muted small">Jipe Farms, Taveta</div></div>
+    <div style="text-align:right;"><strong>{{ label }}</strong><div class="muted small">{{ 'Draft, not approved' if r.status=='draft' else r.status|capitalize }}</div></div>
+  </div>
+  <hr class="divider">
+  <p><strong>{{ l.name }}</strong>{% if l.job_title %} · {{ l.job_title }}{% endif %}{% if l.phone %}<br><span class="muted small">{{ l.phone }}</span>{% endif %}</p>
+  <table class="data">
+    <tbody>
+      <tr><td>{{ 'Monthly salary' if l.pay_type=='monthly' else 'Daily rate' }}</td><td style="text-align:right;">{{ '{:,.0f}'.format(l.rate or 0) }}</td></tr>
+      <tr><td>Days worked{% if l.days_paid_leave %} (plus {{ '%g'|format(l.days_paid_leave) }} sick/leave){% endif %}</td><td style="text-align:right;">{{ '%g'|format(l.days_present) }}</td></tr>
+      <tr><td>Basic pay</td><td style="text-align:right;">{{ '{:,.0f}'.format(l.basic) }}</td></tr>
+      {% if l.absence_deduction %}<tr><td>Less unpaid absence ({{ '%g'|format(l.days_absent) }} days × salary ÷ {{ '%g'|format(divisor) }})</td><td style="text-align:right;">−{{ '{:,.0f}'.format(l.absence_deduction) }}</td></tr>{% endif %}
+      {% if l.additions %}<tr><td>Additions{% if l.notes %} ({{ l.notes }}){% endif %}</td><td style="text-align:right;">{{ '{:,.0f}'.format(l.additions) }}</td></tr>{% endif %}
+      <tr><td><strong>Gross pay</strong></td><td style="text-align:right;"><strong>{{ '{:,.0f}'.format(l.gross) }}</strong></td></tr>
+      {% if l.advances %}<tr><td>Less advances recovered</td><td style="text-align:right;">−{{ '{:,.0f}'.format(l.advances) }}</td></tr>{% endif %}
+      {% if l.other_deductions %}<tr><td>Less other deductions{% if l.notes %} ({{ l.notes }}){% endif %}</td><td style="text-align:right;">−{{ '{:,.0f}'.format(l.other_deductions) }}</td></tr>{% endif %}
+      <tr><td><strong>Net pay (KES)</strong></td><td style="text-align:right;font-size:1.2rem;"><strong>{{ '{:,.0f}'.format(l.net) }}</strong></td></tr>
+    </tbody>
+  </table>
+  <p class="small muted" style="margin-top:.8rem;">Advance still owed after this pay: KES {{ '{:,.0f}'.format(owed_after if owed_after > 0 else 0) }}.
+    {% if l.paid_date %}Paid on {{ l.paid_date }}{% if l.payment_ref %}, ref {{ l.payment_ref }}{% endif %}.{% endif %}</p>
+  <div class="grid cols-2" style="margin-top:2rem;">
+    <div>Received by: ______________________</div><div>Paid by: ______________________</div>
+  </div>
+</div>
+{% endblock %}

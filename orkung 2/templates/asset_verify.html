@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Asset walk-round - {{ app_name }}{% endblock %}
+{% block heading %}Asset walk-round sheet{% endblock %}
+{% block topbar_actions %}<a class="btn secondary" href="{{ url_for('assets.index') }}">Back</a><button class="btn" type="button" onclick="window.print()">Print</button>{% endblock %}
+{% block content %}
+<div class="card section">
+  <p class="small">Printed {{ today }}. Walk the farm, find each item, tick Seen and write its condition. Then record "Seen and verified" on each asset's page; anything not found is reported lost.</p>
+  <table class="data"><thead><tr><th>No.</th><th>Asset</th><th>Should be at</th><th>Answerable</th><th style="width:9%;">Seen</th><th style="width:20%;">Condition / notes</th></tr></thead><tbody>
+  {% for a in rows %}<tr><td>{{ a.asset_no }}</td><td>{{ a.name }}{% if a.quantity > 1 %} × {{ a.quantity }}{% endif %}</td><td>{{ a.location or '—' }}{% if a.status == 'out' %} (checked out){% endif %}</td><td>{{ a.custodian or '—' }}</td><td>&#9744;</td><td></td></tr>
+  {% else %}<tr><td colspan="6" class="muted">No assets.</td></tr>{% endfor %}</tbody></table>
+  <div class="grid cols-2" style="margin-top:2rem;"><div>Checked by: ______________________</div><div>Date: ______________</div></div>
+</div>
+{% endblock %}

@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% import "_farm.html" as f with context %}
+{% block title %}Work Log - {{ app_name }}{% endblock %}
+{% block heading %}Work Log{% endblock %}
+{% block topbar_actions %}<a class="btn secondary" href="{{ url_for('work.log', month=period, worker_id=wid, block_id=bid, activity=act, export='xlsx') }}">Export Excel</a>{% endblock %}
+{% block content %}
+{{ f.farm_tabs('log') }}
+{{ f.month_nav('work.log', label, prev, next, {'worker_id': wid, 'block_id': bid, 'activity': act}) }}
+<form method="get" class="toolbar no-print">
+  <input type="hidden" name="month" value="{{ period }}">
+  <div class="field"><label>Person</label><select name="worker_id"><option value="">Everyone</option>{% for w in workers %}<option value="{{ w.id }}" {{ 'selected' if wid==w.id }}>{{ w.name }}</option>{% endfor %}</select></div>
+  <div class="field"><label>Block</label><select name="block_id"><option value="">All</option>{% for b in blocks %}<option value="{{ b.id }}" {{ 'selected' if bid==b.id }}>{{ b.code }}</option>{% endfor %}</select></div>
+  <div class="field"><label>Job</label><select name="activity"><option value="">All</option>{% for a in activities %}<option {{ 'selected' if act==a }}>{{ a }}</option>{% endfor %}</select></div>
+  <button class="btn subtle" type="submit">Filter</button>
+</form>
+
+<div class="grid cols-3 section">
+  <div class="card" style="grid-column:span 1;"><h3>Where the pay went</h3>
+    {% for a, v in by_act %}<div class="btn-row small" style="justify-content:space-between;border-bottom:1px solid var(--line);padding:.3rem 0;">
+      <span>{% if a == 'No job recorded' %}<span class="pill red">{{ a }}</span>{% else %}{{ a }}{% endif %} <span class="muted">({{ v[0] }})</span></span><strong>{{ fmt(v[1]) }}</strong></div>
+    {% else %}<p class="muted small">Nothing recorded.</p>{% endfor %}
+    <p style="margin-top:.6rem;"><strong>Total KES {{ fmt(total) }}</strong></p></div>
+  <div class="card" style="grid-column:span 2;">
+    {% if rows %}<div class="table-wrap"><table class="data"><thead><tr><th>Date</th><th>Person</th><th>Job</th><th>Block</th><th>Output</th><th>KES</th></tr></thead><tbody>
+    {% for r in rows|reverse %}<tr><td data-label="Date"><a href="{{ url_for('work.day', d=r.work_date) }}">{{ r.work_date }}</a></td><td data-label="Person">{{ r.worker }}{% if r.status=='half' %} <span class="muted small">½</span>{% endif %}</td>
+      <td data-label="Job">{% if r.activity == 'No job recorded' %}<span class="pill red">{{ r.activity }}</span>{% else %}{{ r.activity }}{% endif %}</td>
+      <td data-label="Block">{{ r.block_code or '—' }}{% if r.crop %} <span class="muted small">{{ r.crop }}</span>{% endif %}</td>
+      <td data-label="Output">{{ ('%g'|format(r.quantity) ~ ' ' ~ (r.unit or '')) if r.quantity else '—' }}</td><td data-label="KES">{{ fmt(r.cost) }}</td></tr>{% endfor %}
+    </tbody></table></div>{% else %}<p class="muted">No work recorded for this selection.</p>{% endif %}
+  </div>
+</div>
+{% endblock %}
