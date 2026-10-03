@@ -19,7 +19,8 @@ ACTIVITIES = [
     "Land preparation", "Nursery", "Planting / transplanting", "Weeding", "Irrigation",
     "Fertiliser / compost spreading", "Spraying", "Pruning / desuckering", "Harvesting / picking",
     "Grading / packing", "Drying (chillies)", "Compost making", "Fodder cutting / hay",
-    "Livestock care", "Construction / repairs", "Security / guard", "Transport / delivery",
+    "Livestock care", "Irrigation pipe repair", "Pump repair", "Generator repair", "House / building repair",
+    "Construction / repairs", "Security / guard", "Transport / delivery",
     "Sukoon Camp", "Store / office", "Other",
 ]
 

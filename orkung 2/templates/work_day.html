@@ -32,7 +32,8 @@
       <td data-label="Attendance"><select class="att" name="s_{{ w.id }}" {{ 'disabled' if not editable }}><option value="">—</option>
         {% for v, t in statuses %}<option value="{{ v }}" {{ 'selected' if a and a.status==v }}>{{ t }}</option>{% endfor %}</select></td>
       <td data-label="Main job"><select name="a_{{ w.id }}" {{ 'disabled' if not editable }}><option value="">—</option>
-        {% for x in activities %}<option {{ 'selected' if s and s.activity==x }}>{{ x }}</option>{% endfor %}</select></td>
+        {% for x in activities %}<option {{ 'selected' if s and s.activity==x }}>{{ x }}</option>{% endfor %}
+        {% if s and s.activity not in activities %}<option selected>{{ s.activity }}</option>{% endif %}</select></td>
       <td data-label="Block"><select name="b_{{ w.id }}" style="min-width:110px;" {{ 'disabled' if not editable }}><option value="">—</option>
         {% for b in blocks %}<option value="{{ b.id }}" {{ 'selected' if s and s.block_id==b.id }}>{{ b.code }}</option>{% endfor %}</select></td>
       <td data-label="Output"><div class="btn-row" style="flex-wrap:nowrap;"><input type="number" step="0.1" name="q_{{ w.id }}" value="{{ '%g'|format(s.quantity) if s and s.quantity is not none else '' }}" style="width:80px;" {{ 'disabled' if not editable }}>

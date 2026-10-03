@@ -154,6 +154,13 @@ q_rows = q("SELECT id FROM work_logs WHERE worker_id=? AND work_date='2026-09-01
 c = sqlite3.connect(dbpath); c.execute("UPDATE work_logs SET hours=4 WHERE id=?", (q_rows[0]["id"],)); c.commit(); c.close()
 manager.post("/work/log/add", data={"d": "2026-09-01", "worker_id": asha["id"], "activity": "Weeding",
                                     "block_id": d1["id"], "hours": "4"})
+sheet(manager, "2026-09-07", {asha["id"]: ("present", "Pump repair", "", "", "", ""),
+                              bar["id"]: ("present", "Generator repair", "", "", "", "")})
+html = manager.get("/work/day?d=2026-09-07").get_data(as_text=True)
+check("repair jobs offered and kept on the sheet", html.count("selected>Pump repair") == 1
+      and html.count("selected>Generator repair") == 1 and "House / building repair" in html
+      and "Irrigation pipe repair" in html)
+c = sqlite3.connect(dbpath); c.execute("DELETE FROM attendance WHERE work_date='2026-09-07'"); c.execute("DELETE FROM work_logs WHERE work_date='2026-09-07'"); c.commit(); c.close()
 r = sheet(manager, "2099-01-01", {asha["id"]: ("present", "Weeding", "", "", "", "")})
 check("future sheet refused", "future date" in r.get_data(as_text=True))
 r = viewer.post("/work/day", data={"d": "2026-09-10", "wid": [asha["id"]], f"s_{asha['id']}": "present"})
