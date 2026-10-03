@@ -301,3 +301,62 @@ def rag(due_date, status, today=None):
 
 def fmt(n):
     return "—" if n is None else f"{n:,.0f}"
+
+
+def overview(sections, sales_visible=False):
+    """Figures for the main dashboard's 'Farm this month' section. `sections` is the
+    set of menu sections the user may see; only those figures are worked out."""
+    period = this_month()
+    start, end = month_bounds(period)
+    today = date.today().isoformat()
+    out = dict(period=period, label=month_label(period))
+    if "crops" in sections:
+        out["kg"] = db.query("SELECT COALESCE(SUM(kg),0) k FROM harvests WHERE harvest_date BETWEEN ? AND ?",
+                             (start, end), one=True)["k"]
+        out["plantings"] = len(active_plantings())
+        out["blocks"] = len(blocks())
+        from blueprints.crops import phi_holds
+        out["holds"] = len(phi_holds())
+    if sales_visible:
+        s = db.query("SELECT COALESCE(SUM(kg*price_per_kg),0) v, COALESCE(SUM(amount_paid),0) p FROM crop_sales "
+                     "WHERE sale_date BETWEEN ? AND ?", (start, end), one=True)
+        out["sales"], out["received"] = s["v"], s["p"]
+        out["owed"] = db.query("SELECT COALESCE(SUM(kg*price_per_kg - amount_paid),0) v FROM crop_sales", one=True)["v"]
+    if "work" in sections:
+        staff = workers()
+        att = {r["status"]: r["c"] for r in db.query(
+            "SELECT status, COUNT(*) c FROM attendance WHERE work_date=? GROUP BY status", (today,))}
+        lab = labour_rows(start, end)
+        idle = [r for r in lab if r["activity"] == "No job recorded"]
+        out.update(staff=len(staff), at_work=att.get("present", 0) + att.get("half", 0), marked_today=sum(att.values()),
+                   labour=sum(r["cost"] for r in lab), idle_days=len(idle), idle_cost=sum(r["cost"] for r in idle),
+                   inputs=sum(r["cost"] for r in input_rows(start, end) if r["category"] in CROP_CATEGORIES or r["block_id"]))
+    if "payroll" in sections:
+        run = db.query("SELECT * FROM pay_runs ORDER BY period DESC LIMIT 1", one=True)
+        out["last_run"] = dict(run) if run else None
+        from blueprints.work import outstanding_advances
+        out["advances"] = sum(max(outstanding_advances(w["id"]), 0) for w in workers(active_only=False))
+    if "store" in sections:
+        from blueprints.stock import _summary
+        rows = _summary()
+        out["store_items"] = len(rows)
+        out["store_low"] = sum(1 for r in rows if {f[1] for f in r["flags"]} & {"Low", "Out of stock", "Count needed"})
+        out["store_expiry"] = sum(1 for r in rows if {f[1] for f in r["flags"]} & {"Expired stock", "Expires soon"})
+        out["store_value"] = sum(r["value"] or 0 for r in rows)
+        loss = db.query("SELECT COALESCE(SUM(-qty*COALESCE(unit_cost,0)),0) v FROM stock_movements "
+                        "WHERE ((move_type='adjust' AND qty<0) OR move_type='disposed') AND date(move_date) BETWEEN ? AND ?",
+                        (start, end), one=True)["v"]
+        out["store_loss"] = loss
+    if "assets" in sections:
+        live = db.query("SELECT * FROM assets WHERE status != 'disposed'")
+        stale = (date.today() - timedelta(days=90)).isoformat()
+        out.update(assets=len(live), assets_out=sum(1 for a in live if a["status"] == "out"),
+                   assets_bad=sum(1 for a in live if a["condition"] in ("needs_repair", "broken") or a["status"] == "lost"),
+                   assets_stale=sum(1 for a in live if not a["last_verified"] or a["last_verified"] < stale))
+    if "milestones" in sections:
+        ms = db.query("SELECT due_date, status FROM milestones WHERE status IN ('open','at_risk')")
+        colours = [rag(m["due_date"], m["status"], today)[0] for m in ms]
+        out.update(ms_red=colours.count("red"), ms_amber=colours.count("amber"), ms_open=len(ms),
+                   ms_next=db.query("SELECT * FROM milestones WHERE status IN ('open','at_risk') AND due_date >= ? "
+                                    "ORDER BY due_date LIMIT 1", (today,), one=True))
+    return out

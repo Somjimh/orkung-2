@@ -4,6 +4,7 @@ import calendar
 import db
 import helpers
 import auth
+import farm
 
 bp = Blueprint("dashboard", __name__)
 
@@ -225,5 +226,7 @@ def index():
         sites=helpers.site_options(), species_list=helpers.species_options(), groups=helpers.group_options(),
         f_site_id=site_id, f_species_id=species_id, f_group_id=group_id, f_date_from=date_from, f_date_to=date_to,
         today=today.isoformat(),
+        farm=farm.overview(auth.visible_sections(g.user["role"]),
+                           sales_visible=g.user["role"] not in ("worker", "vet")),
     )
     return render_template("dashboard.html", **ctx)

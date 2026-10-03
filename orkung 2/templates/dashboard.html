@@ -2,6 +2,45 @@
 {% block title %}Dashboard - {{ app_name }}{% endblock %}
 {% block heading %}Dashboard{% endblock %}
 {% block content %}
+{% set fm = farm %}
+{% if fm.keys()|list|length > 2 %}
+<div class="section">
+  <h2>Farm this month <span class="muted small" style="font-weight:600;">{{ fm.label }}</span></h2>
+  <div class="grid cols-5">
+    {% if 'staff' in fm %}
+    <a style="text-decoration:none;" class="stat-card link {{ 'amber' if fm.staff and not fm.marked_today }}" href="{{ url_for('work.day') }}"><div class="stat-label">At work today</div><div class="stat-value">{{ fm.at_work }} / {{ fm.staff }}</div>
+      <div class="stat-sub">{{ 'daily sheet not filled yet' if fm.staff and not fm.marked_today else 'from the daily sheet' }}</div></a>
+    <a style="text-decoration:none;" class="stat-card link" href="{{ url_for('work.log') }}"><div class="stat-label">Labour cost (KES)</div><div class="stat-value">{{ '{:,.0f}'.format(fm.labour) }}</div><div class="stat-sub">this month so far</div></a>
+    <a style="text-decoration:none;" class="stat-card link {{ 'red' if fm.idle_days }}" href="{{ url_for('work.log', activity='No job recorded') }}"><div class="stat-label">Paid days, no job logged</div><div class="stat-value">{{ fm.idle_days }}</div><div class="stat-sub">KES {{ '{:,.0f}'.format(fm.idle_cost) }}</div></a>
+    <a style="text-decoration:none;" class="stat-card link" href="{{ url_for('crops.report_inputs') }}"><div class="stat-label">Inputs issued (KES)</div><div class="stat-value">{{ '{:,.0f}'.format(fm.inputs) }}</div><div class="stat-sub">chemicals, fertiliser, seed, fuel</div></a>
+    {% endif %}
+    {% if 'kg' in fm %}
+    <a style="text-decoration:none;" class="stat-card link" href="{{ url_for('crops.harvests') }}"><div class="stat-label">Harvested (kg)</div><div class="stat-value">{{ '{:,.0f}'.format(fm.kg) }}</div><div class="stat-sub">{{ fm.plantings }} plantings on {{ fm.blocks }} blocks</div></a>
+    {% if fm.holds %}<a style="text-decoration:none;" class="stat-card link red" href="{{ url_for('crops.index') }}"><div class="stat-label">Blocks not to harvest</div><div class="stat-value">{{ fm.holds }}</div><div class="stat-sub">sprayed, waiting period</div></a>{% endif %}
+    {% endif %}
+    {% if 'sales' in fm %}
+    <a style="text-decoration:none;" class="stat-card link" href="{{ url_for('crops.sales') }}"><div class="stat-label">Crop sales (KES)</div><div class="stat-value">{{ '{:,.0f}'.format(fm.sales) }}</div><div class="stat-sub">received {{ '{:,.0f}'.format(fm.received) }}</div></a>
+    <a style="text-decoration:none;" class="stat-card link {{ 'amber' if fm.owed > 0.5 }}" href="{{ url_for('crops.sales') }}"><div class="stat-label">Owed by buyers (KES)</div><div class="stat-value">{{ '{:,.0f}'.format(fm.owed) }}</div><div class="stat-sub">all unpaid sales</div></a>
+    {% endif %}
+    {% if 'store_items' in fm %}
+    <a style="text-decoration:none;" class="stat-card link {{ 'amber' if fm.store_low or fm.store_expiry }}" href="{{ url_for('stock.index') }}"><div class="stat-label">Store alerts</div><div class="stat-value">{{ fm.store_low + fm.store_expiry }}</div><div class="stat-sub">{{ fm.store_low }} low or out · {{ fm.store_expiry }} expiring</div></a>
+    <a style="text-decoration:none;" class="stat-card link {{ 'red' if fm.store_loss > 0.5 }}" href="{{ url_for('stock.losses') }}"><div class="stat-label">Store losses (KES)</div><div class="stat-value">{{ '{:,.0f}'.format(fm.store_loss) }}</div><div class="stat-sub">count shortfalls this month · stock worth {{ '{:,.0f}'.format(fm.store_value) }}</div></a>
+    {% endif %}
+    {% if 'assets' in fm %}
+    <a style="text-decoration:none;" class="stat-card link {{ 'red' if fm.assets_bad else ('amber' if fm.assets_out else '') }}" href="{{ url_for('assets.index') }}"><div class="stat-label">Assets</div><div class="stat-value">{{ fm.assets_out }} out · {{ fm.assets_bad }} bad</div><div class="stat-sub">{{ fm.assets }} items · {{ fm.assets_stale }} not seen in 90 days</div></a>
+    {% endif %}
+    {% if 'ms_open' in fm %}
+    <a style="text-decoration:none;" class="stat-card link {{ 'red' if fm.ms_red else ('amber' if fm.ms_amber else '') }}" href="{{ url_for('milestones.index') }}"><div class="stat-label">Milestones</div><div class="stat-value">{{ fm.ms_red }} overdue</div>
+      <div class="stat-sub">{{ fm.ms_amber }} due soon{% if fm.ms_next %} · next: {{ fm.ms_next.due_date }} {{ fm.ms_next.title[:38] }}{% if fm.ms_next.title|length > 38 %}…{% endif %}{% endif %}</div></a>
+    {% endif %}
+    {% if 'advances' in fm %}
+    <a style="text-decoration:none;" class="stat-card link" href="{{ url_for('payroll.index') }}"><div class="stat-label">Payroll</div><div class="stat-value" style="font-size:1.2rem;">{% if fm.last_run %}{{ fm.last_run.period }} {{ fm.last_run.status }}{% else %}no pay run yet{% endif %}</div>
+      <div class="stat-sub">advances owed KES {{ '{:,.0f}'.format(fm.advances) }}</div></a>
+    {% endif %}
+  </div>
+</div>
+<h2 style="margin-top:.4rem;">Livestock</h2>
+{% endif %}
 
 <form class="toolbar card" method="get" style="margin-bottom:1.4rem;">
   <div class="field">

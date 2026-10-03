@@ -379,6 +379,25 @@ check("storekeeper menu shows Store and Assets but not Payroll", "Store</a>" in 
 html = admin.get("/").get_data(as_text=True)
 check("admin menu shows Crops & Farm section", "Crops &amp; Farm" in html and "Daily Sheet" in html)
 
+# dashboard shows the farm section, per role
+h = admin.get("/").get_data(as_text=True)
+check("dashboard shows 'Farm this month' with every card for admin",
+      all(x in h for x in ["Farm this month", "At work today", "Labour cost", "Harvested (kg)", "Crop sales", "Store alerts",
+                           "Assets", "Milestones", "Payroll", ">Livestock<", "Herd summary"]))
+h = store.get("/").get_data(as_text=True)
+check("storekeeper dashboard: store, assets, crops, no pay or labour",
+      "Store alerts" in h and "Assets" in h and "Harvested (kg)" in h and "Labour cost" not in h and "Payroll</div>" not in h
+      and "Crop sales" in h)
+h = worker.get("/").get_data(as_text=True)
+check("farm worker dashboard: harvests and store only, no money cards",
+      "Harvested (kg)" in h and "Store alerts" in h and "Crop sales" not in h and "Labour cost" not in h)
+h = vet.get("/").get_data(as_text=True)
+check("vet dashboard: store only, no crops", "Store alerts" in h and "Harvested (kg)" not in h)
+with app.app_context():
+    import farm
+    ov = farm.overview(auth_sections := {"crops", "work", "payroll", "store", "assets", "milestones"}, sales_visible=True)
+    check("overview figures computed", all(k in ov for k in ("kg", "sales", "labour", "store_items", "assets", "ms_open", "advances")))
+
 # fresh database also starts cleanly
 fresh = os.path.join(tmpdir, "fresh.db")
 
