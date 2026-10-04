@@ -379,6 +379,28 @@ check("storekeeper menu shows Store and Assets but not Payroll", "Store</a>" in 
 html = admin.get("/").get_data(as_text=True)
 check("admin menu shows Crops & Farm section", "Crops &amp; Farm" in html and "Daily Sheet" in html)
 
+# store count upload reads the new columns and friendly category names
+import io
+csv_text = ("Count date,Item name (as on label),Category,Location / shelf,Pack size + unit,Full packs,Loose qty + unit,"
+            "Batch no,Expiry (MM/YY),Condition,Price per pack (KES),Reorder level (packs),Active ingredient,"
+            "Organic approved,Pre-harvest days,Notes,Value of full packs (KES)\n"
+            "2026-10-05,Test Neem,Crop chemical,Shelf A,1 L,2,400 ml,,08/27,Good,1500,1,Azadirachtin,Yes,1,,3000\n"
+            "2026-10-05,Test gloves,supply,Vet box,100 pcs,1,35 pcs,,,Opened,900,1,,,,,900\n"
+            "2026-10-05,Bad category,rocks,Shelf,1 kg,1,,,,Good,1,1,,,,,1\n")
+r = admin.post("/admin/import-records/preview", data={"kind": "stock", "file": (io.BytesIO(csv_text.encode()), "count.csv")},
+               content_type="multipart/form-data")
+tok = re.search(r'name="token" value="([0-9a-f]+)"', r.get_data(as_text=True))
+check("store count preview flags an unknown category", "category not understood" in r.get_data(as_text=True))
+admin.post("/admin/import-records/commit", data={"token": tok.group(1) if tok else "", "kind": "stock"})
+neem = q("SELECT * FROM stock_items WHERE name='Test Neem'")
+check("store count upload: chemical with organic, PHI and active ingredient",
+      bool(neem) and neem[0]["category"] == "chemical" and neem[0]["organic_ok"] == 1 and neem[0]["phi_days"] == 1
+      and neem[0]["active_ingredient"] == "Azadirachtin")
+check("store count upload: quantity = full packs + loose",
+      q("SELECT SUM(b.qty) s FROM stock_batches b JOIN stock_items i ON i.id=b.item_id WHERE i.name='Test Neem'")[0]["s"] == 2400
+      and q("SELECT SUM(b.qty) s FROM stock_batches b JOIN stock_items i ON i.id=b.item_id WHERE i.name='Test gloves'")[0]["s"] == 135)
+check("store count upload: bad row not loaded", not q("SELECT 1 FROM stock_items WHERE name='Bad category'"))
+
 # dashboard shows the farm section, per role
 h = admin.get("/").get_data(as_text=True)
 check("dashboard shows 'Farm this month' with every card for admin",

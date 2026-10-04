@@ -36,10 +36,11 @@ KINDS = {
         example=[("2026-10-05", "Goat", "132", "Coughing, runny nose", "39.8", "Less than usual", "Pneumonia?", "",
                   "Treated", "Juma", "Kept in shade")]),
     "stock": dict(
-        label="Medicine stock count",
+        label="Store count (medicines, chemicals, fertiliser, seed, supplies)",
         header=["count_date", "item", "category", "location", "pack_size", "full_packs", "loose_qty", "batch_no", "expiry",
-                "condition", "price_per_pack", "reorder_packs", "notes"],
-        example=[("2026-10-02", "Tylosin", "medicine", "Shelf", "100 ml", "1", "", "260104", "12/28", "Good", "850", "1", "")]),
+                "condition", "price_per_pack", "reorder_packs", "active_ingredient", "organic_ok", "phi_days", "notes"],
+        example=[("2026-10-02", "Tylosin", "medicine", "Shelf", "100 ml", "1", "", "260104", "12/28", "Good", "850", "1",
+                  "", "", "", "")]),
     "treatments": dict(
         label="Treatments",
         header=["date", "species", "tag_id", "treatment_type", "medicine", "dose", "dose_unit", "route", "reason",
@@ -71,6 +72,27 @@ def _f(v):
         return float(v) if v not in (None, "") else None
     except ValueError:
         return None
+
+
+CATEGORY_WORDS = {
+    "medicine": "medicine", "medicines": "medicine", "drug": "medicine", "vet": "medicine",
+    "vaccine": "vaccine", "vaccines": "vaccine",
+    "chemical": "chemical", "cropchemical": "chemical", "chemicals": "chemical", "pesticide": "chemical",
+    "fungicide": "chemical", "herbicide": "chemical", "insecticide": "chemical",
+    "fertiliser": "fertiliser", "fertilizer": "fertiliser", "fertilisermanure": "fertiliser", "manure": "fertiliser",
+    "seed": "seed", "seeds": "seed", "seedseedlings": "seed", "seedlings": "seed",
+    "feed": "feed", "feeds": "feed", "fuel": "fuel", "fueloil": "fuel", "oil": "fuel",
+    "supply": "supply", "supplies": "supply", "supplyother": "supply", "other": "supply", "tools": "supply",
+}
+
+
+def _category(v):
+    k = "".join(ch for ch in (v or "").lower() if ch.isalnum())
+    return CATEGORY_WORDS.get(k, "medicine" if not k else None)
+
+
+def _yes(v):
+    return 1 if (v or "").strip().lower() in ("yes", "y", "1", "true", "ok", "approved") else 0
 
 
 def _valid_date(s):
@@ -105,6 +127,9 @@ ALIASES = {
     "looseqtyunit": "loose_qty", "looseqty": "loose_qty", "batchno": "batch_no", "batch": "batch_no", "expirydate": "expiry",
     "conditiongooddamagedexpired": "condition", "priceperpack": "price_per_pack", "priceperpackkes": "price_per_pack",
     "reorderpacks": "reorder_packs", "reorderlevelpacks": "reorder_packs", "countdate": "count_date", "tasktype": "task_type", "damtag": "dam_tag", "mothertag": "dam_tag",
+    "expirymmyy": "expiry", "reorderwhenbelowpacks": "reorder_packs", "activeingredient": "active_ingredient",
+    "organicapproved": "organic_ok", "organicapprovedyesno": "organic_ok", "allowedfororganicuse": "organic_ok",
+    "preharvestdays": "phi_days", "preharvestintervaldays": "phi_days", "phidays": "phi_days", "phi": "phi_days",
     "birthweight": "birth_weight", "statusdate": "status_date", "tagid": "tag_id",
 }
 
@@ -276,6 +301,10 @@ def _check(kind, rows):
                 errs.append(f"item already exists in {it['unit']}, this row is in {base}")
             if r.get("expiry") and not st.parse_expiry(r["expiry"]):
                 errs.append("expiry not understood (use MM/YY)")
+            if _category(r.get("category")) is None:
+                errs.append("category not understood (medicine, vaccine, chemical, fertiliser, seed, feed, fuel, supply)")
+            if r.get("phi_days") and _f(r.get("phi_days")) is None:
+                errs.append("pre-harvest days must be a number")
             key = (name.lower(), (r.get("batch_no") or "").strip().lower(), (r.get("location") or "").strip().lower())
             if key in seen:
                 errs.append("same item, batch and location twice in this file")
@@ -516,9 +545,13 @@ def commit():
             reorder = _f(r.get("reorder_packs"))
             it = st.find_item(name)
             if not it:
-                iid = db.execute("INSERT INTO stock_items (name, category, pack_size, unit, price_per_pack, reorder_level, notes) VALUES (?,?,?,?,?,?,?)",
-                                 (name, (r.get("category") or "medicine").lower(), size_b, base, price,
-                                  (reorder if reorder is not None else 1) * size_b, None))
+                phi = _f(r.get("phi_days"))
+                iid = db.execute("INSERT INTO stock_items (name, category, pack_size, unit, price_per_pack, reorder_level, notes, "
+                                 "active_ingredient, organic_ok, phi_days) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                                 (name, _category(r.get("category")), size_b, base, price,
+                                  (reorder if reorder is not None else 1) * size_b, None,
+                                  r.get("active_ingredient") or None, _yes(r.get("organic_ok")),
+                                  int(phi) if phi is not None else None))
                 med = db.query("SELECT id FROM medicines WHERE lower(name)=lower(?)", (name,), one=True)
                 if med:
                     db.execute("UPDATE stock_items SET medicine_id=? WHERE id=?", (med["id"], iid))
@@ -528,6 +561,12 @@ def commit():
                     db.execute("UPDATE stock_items SET price_per_pack=? WHERE id=?", (price, it["id"]))
                 if reorder is not None:
                     db.execute("UPDATE stock_items SET reorder_level=? WHERE id=?", (reorder * it["pack_size"], it["id"]))
+                if r.get("active_ingredient"):
+                    db.execute("UPDATE stock_items SET active_ingredient=? WHERE id=?", (r["active_ingredient"], it["id"]))
+                if r.get("organic_ok"):
+                    db.execute("UPDATE stock_items SET organic_ok=? WHERE id=?", (_yes(r["organic_ok"]), it["id"]))
+                if _f(r.get("phi_days")) is not None:
+                    db.execute("UPDATE stock_items SET phi_days=? WHERE id=?", (int(_f(r["phi_days"])), it["id"]))
                 it = db.query("SELECT * FROM stock_items WHERE id=?", (it["id"],), one=True)
             loose_amt, loose_unit = st.parse_amount(r.get("loose_qty"))
             loose_b = st.to_base(loose_amt, loose_unit or unit)[0] if loose_amt else 0
