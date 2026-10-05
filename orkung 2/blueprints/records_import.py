@@ -158,6 +158,29 @@ def _xlsx_to_csv(src, dest, kind):
     hint = {"observations": "observ", "treatments": "treat", "weights": "weigh", "animals": "animal", "stock": "stock",
             "tasks": "task"}.get(kind, "")
     sheets = sorted(wb.worksheets, key=lambda ws: 0 if hint and hint in ws.title.lower() else 1)
+    if kind == "stock":  # a store workbook may hold several count sheets (one per store): read them all
+        header, rows_out = [], []
+        for ws in wb.worksheets:
+            rows = list(ws.iter_rows(values_only=True))
+            for hi, row in enumerate(rows[:15]):
+                keys = [_key(_cell(c)) for c in row]
+                if need <= set(keys):
+                    for k in keys:
+                        if k and k not in header:
+                            header.append(k)
+                    for r in rows[hi + 1:]:
+                        vals = [_cell(c) for c in r]
+                        if any(vals):
+                            rows_out.append({k: v for k, v in zip(keys, vals) if k})
+                    break
+        if not header:
+            raise ValueError("no sheet with the expected column headings was found")
+        with open(dest, "w", newline="", encoding="utf-8") as f:
+            w = csv.writer(f)
+            w.writerow(header)
+            for d in rows_out:
+                w.writerow([d.get(k, "") for k in header])
+        return
     for ws in sheets:
         rows = list(ws.iter_rows(values_only=True))
         for hi, row in enumerate(rows[:15]):
