@@ -80,7 +80,8 @@ check("restart does not make a second backup", len([f for f in os.listdir(tmpdir
 def client(user, pw):
     c = app.test_client()
     r = c.post("/login", data={"username": user, "password": pw}, follow_redirects=True)
-    check(f"login {user}", r.status_code == 200 and "Log out" in r.get_data(as_text=True))
+    page = r.get_data(as_text=True)
+    check(f"login {user}", r.status_code == 200 and ("Log out" in page or "Toka" in page))
     return c
 
 

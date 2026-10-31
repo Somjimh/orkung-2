@@ -1,0 +1,39 @@
+{% extends "farm/_base.html" %}
+{% from "farm/_ui.html" import hero with context %}
+{% block title %}Orkung · {{ t('home') }}{% endblock %}
+{% block hero %}
+{% call hero('#1F5130') %}
+  <div>
+    <h1>{{ t('hello') }}, {{ current_user.full_name.split(' ')[0] }}</h1>
+    <div class="sub">{{ day_text }} · Jipe Farms, Taveta</div>
+  </div>
+  <div class="stats">
+    <div class="stat"><b>{{ at_work }}/{{ staff }}</b><span>{{ t('at_work') }}</span></div>
+    <div class="stat"><b>{{ done }}/{{ total }}</b><span>{{ t('jobs_done') }}</span></div>
+    <div class="stat {{ 'alert' if needs }}"><b>{{ needs|length }}</b><span>{{ t('need_you') }}</span></div>
+  </div>
+{% endcall %}
+{% endblock %}
+{% block content %}
+{% if needs %}
+  {% for level, text in needs[:3] %}<div class="note {{ level }}">{{ text }}</div>{% endfor %}
+  {% if needs|length > 3 %}<a href="{{ url_for('farmapp.report') }}" style="font-weight:900">+ {{ needs|length - 3 }} more</a>{% endif %}
+{% endif %}
+
+<div class="tiles">
+  {% for tl in tiles %}
+  <a class="tile" href="{{ tl.href }}" style="background: {{ tl.bg }}; color: {{ tl.fg }}">
+    <div><div class="name">{{ tl.name }}</div>{% if tl.people %}<div class="who">{{ tl.people }}</div>{% endif %}</div>
+    <div class="line">{{ tl.line }}</div>
+  </a>
+  {% endfor %}
+</div>
+
+<a class="wide" href="{{ url_for('farmapp.report') }}" style="background:#00695C;color:#fff">
+  <div><div style="font-size:18px;font-weight:900">{{ t('report') }}</div>
+    <div style="font-size:13px;font-weight:700;color:#CDEDE8">{% if conf %}{{ t('confirmed_by') }} {{ conf.full_name }}{% else %}{{ t('not_confirmed') }}{% endif %}</div></div>
+  <span style="font-size:24px;font-weight:900" aria-hidden="true">›</span>
+</a>
+{% if can_confirm and not conf %}<a class="btn go block" href="{{ url_for('farmapp.confirm') }}">{{ t('confirm_day') }}</a>{% endif %}
+{% if manager %}<a class="btn out block" href="{{ url_for('farmapp.routines') }}">{{ t('routines') }}</a>{% endif %}
+{% endblock %}

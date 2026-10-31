@@ -9,7 +9,7 @@ bp = Blueprint("auth", __name__)
 @bp.route("/login", methods=["GET", "POST"])
 def login():
     if g.user:
-        return redirect(url_for("dashboard.index"))
+        return redirect(url_for("farmapp.home"))
     error = None
     if request.method == "POST":
         username = request.form.get("username", "").strip()
@@ -21,7 +21,7 @@ def login():
             session.permanent = True
             db.execute("UPDATE users SET last_login=? WHERE id=?", (datetime.utcnow().isoformat(), user["id"]))
             db.audit(user, "login", "user", user["id"], f"{user['username']} logged in")
-            nxt = request.args.get("next") or url_for("dashboard.index")
+            nxt = request.args.get("next") or url_for("farmapp.home")
             return redirect(nxt)
         error = "Incorrect username or password."
         db.audit(None, "login_failed", "user", summary=f"failed login for '{username}'")

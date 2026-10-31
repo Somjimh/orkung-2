@@ -32,7 +32,8 @@ creds = {
 sessions = {}
 for user, pw in creds.items():
     s, r = login(user, pw)
-    check(f"login as {user} succeeds and reaches dashboard", r.status_code == 200 and "Dashboard" in r.text)
+    check(f"login as {user} succeeds and reaches the farm app or dashboard", r.status_code == 200 and
+          ("Dashboard" in r.text or 'class="farm"' in r.text))
     sessions[user] = s
 
 s_bad, r_bad = login("admin", "wrongpassword")

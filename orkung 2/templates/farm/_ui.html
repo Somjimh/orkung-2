@@ -1,0 +1,12 @@
+{% macro hero(bg, fg='#FFFFFF', back=None) %}
+<header class="hero" style="background: {{ bg }}; color: {{ fg }}">
+  <div class="top">
+    {% if back %}<a class="backlink" href="{{ back }}">‹ {{ t('home') }}</a>{% else %}<span class="brand">ORKUNG</span>{% endif %}
+    <div class="langs" role="group" aria-label="Language">
+      <a href="{{ url_for('farmapp.set_lang', code='en', next=request.full_path) }}" class="{{ 'on' if lang_now()=='en' }}">English</a>
+      <a href="{{ url_for('farmapp.set_lang', code='sw', next=request.full_path) }}" class="{{ 'on' if lang_now()=='sw' }}">Kiswahili</a>
+    </div>
+  </div>
+  {{ caller() }}
+</header>
+{% endmacro %}

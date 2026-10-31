@@ -91,6 +91,7 @@
     <div class="field"><label>Category</label><select name="category">{% for c, t in categories %}<option value="{{ c }}" {{ 'selected' if it.category==c }}>{{ t }}</option>{% endfor %}</select></div>
     <div class="field"><label>Active ingredient</label><input type="text" name="active_ingredient" value="{{ it.active_ingredient or '' }}"></div>
     <div class="field"><label>Pre-harvest interval (days)</label><input type="number" name="phi_days" value="{{ it.phi_days or '' }}"></div>
+    <div class="field"><label style="display:flex;gap:.5rem;align-items:center;"><input type="checkbox" name="bee_harmful" {{ 'checked' if it.bee_harmful }} style="width:auto;min-height:0;"> Harmful to bees (from the label)</label></div>
     <div class="field checkbox-row"><input type="checkbox" name="organic_ok" id="orgok" {{ 'checked' if it.organic_ok }}><label for="orgok" style="margin:0;">Allowed for organic use (certifier approved)</label></div>
     <div class="field"><label>Medicine catalogue entry (for withdrawal days)</label><select name="medicine_id"><option value="">—</option>{% for m in medicines %}<option value="{{ m.id }}" {{ 'selected' if it.medicine_id==m.id }}>{{ m.name }}</option>{% endfor %}</select></div>
     <div class="field" style="grid-column:1/-1;"><label>Notes</label><input type="text" name="notes" value="{{ it.notes or '' }}"></div>

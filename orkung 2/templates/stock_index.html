@@ -53,6 +53,7 @@
     <div class="field"><label>Category</label><select name="category">{% for c, t in categories %}<option value="{{ c }}" {{ 'selected' if cat==c }}>{{ t }}</option>{% endfor %}</select></div>
     <div class="field"><label>Active ingredient (chemicals)</label><input type="text" name="active_ingredient" placeholder="e.g. Abamectin 18 g/L"></div>
     <div class="field"><label>Pre-harvest interval (days)</label><input type="number" name="phi_days" placeholder="from the label"><div class="hint">Days after spraying before the crop can be harvested.</div></div>
+    <div class="field"><label style="display:flex;gap:.5rem;align-items:center;"><input type="checkbox" name="bee_harmful" style="width:auto;min-height:0;"> Harmful to bees (from the label)</label></div>
     <div class="field checkbox-row"><input type="checkbox" name="organic_ok" id="orgok"><label for="orgok" style="margin:0;">Allowed for organic use (certifier approved)</label></div>
     <div class="field"><label>Price per pack (KES)</label><input type="number" step="0.01" name="price_per_pack"></div>
     <div class="field"><label>Reorder when below (packs)</label><input type="number" step="0.1" name="reorder_packs" value="1"></div>

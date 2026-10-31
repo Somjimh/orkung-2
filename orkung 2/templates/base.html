@@ -13,7 +13,7 @@
 {% macro navlinks() %}
   {% set ep = request.endpoint or '' %}
   {% if 'dashboard' in nav %}<a href="{{ url_for('dashboard.index') }}" class="{{ 'active' if ep=='dashboard.index' }}"><span class="ic">&#9679;</span> Dashboard</a>{% endif %}
-  {% if 'today' in nav %}<a href="{{ url_for('today.index') }}" class="{{ 'active' if ep.startswith('today.') }}"><span class="ic">&#9998;</span> Today</a>{% endif %}
+  {% if 'today' in nav %}<a href="{{ url_for('farmapp.home') }}"><span class="ic">&#9733;</span> Farm app</a>{% endif %}
   {% if 'animals' in nav %}<div class="section-label">Livestock</div>{% endif %}
   {% if 'animals' in nav %}<a href="{{ url_for('animals.list_view') }}" class="{{ 'active' if ep.startswith('animals.') and ep!='animals.add' }}"><span class="ic">&#128366;</span> Animals</a>{% endif %}
   {% if 'add_animal' in nav %}<a href="{{ url_for('animals.add') }}" class="{{ 'active' if ep=='animals.add' }}"><span class="ic">&#65291;</span> Add Animal</a>{% endif %}

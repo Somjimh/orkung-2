@@ -56,7 +56,8 @@ def q(sql, args=()):
 def client(user, pw):
     c = app.test_client()
     r = c.post("/login", data={"username": user, "password": pw}, follow_redirects=True)
-    check(f"login {user}", r.status_code == 200 and "Log out" in r.get_data(as_text=True))
+    page = r.get_data(as_text=True)
+    check(f"login {user}", r.status_code == 200 and ("Log out" in page or "Toka" in page))
     return c
 
 
@@ -138,7 +139,7 @@ for it, packs, price in ((chem, "2", "3000"), (meal, "2", "3500"), (diesel, "5",
 # ---------------------------------------------------------------------------
 r = manager.get("/today")
 check("manager sees the Today page", r.status_code == 200 and "Today on the farm" in text(r))
-check("Today is in the menu", 'href="/today"' in text(manager.get("/")))
+check("Farm app is in the menu", 'href="/farm"' in text(manager.get("/")))
 check("no generator yet: the manager is offered to add one", "Add generator" in text(r))
 r = viewer.get("/today")
 check("viewer can look at Today", r.status_code == 200 and "Add a job" not in text(r))
@@ -147,7 +148,7 @@ r = kapuo_c.get("/today")
 check("linked worker sees their own name fixed", "logged in as <strong>Kapuo</strong>" in text(r) and 'name="worker_id"' not in text(r))
 r = phone.get("/today")
 check("farm phone (not linked) picks the person", 'name="worker_id"' in text(r))
-check("worker menu shows Today", 'href="/today"' in text(r))
+check("worker menu shows the farm app", 'href="/farm"' in text(r))
 
 # ---------------------------------------------------------------------------
 # 4. Jobs

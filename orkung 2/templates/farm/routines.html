@@ -1,0 +1,64 @@
+{% extends "farm/_base.html" %}
+{% from "farm/_ui.html" import hero with context %}
+{% block title %}Orkung · {{ t('routines') }}{% endblock %}
+{% block hero %}
+{% call hero('#1F5130', '#FFFFFF', url_for('farmapp.home')) %}
+  <div><h1>{{ t('routines') }}</h1>
+    <div class="sub">{{ 'Kazi hizi zinaonekana kwenye orodha ya kila mtu kila siku.' if lang_now()=='sw' else "These jobs appear on each person's list on the right days." }}</div></div>
+{% endcall %}
+{% endblock %}
+{% block content %}
+{% if not staff %}<div class="note amber">Add the staff first (Full records › Daily Sheet &amp; Staff › Staff).</div>{% endif %}
+<form method="post"><input type="hidden" name="action" value="suggested">
+  <button class="btn out block" type="submit">Load the suggested jobs (Godfrey, Kajona, Kapuo, Prince, Muli, Ali)</button></form>
+
+<div class="list">
+  {% for r in rows %}
+  <div style="{{ 'opacity:.55' if not r.active }}">
+    <div><div class="t">{{ r.worker_name }}: {{ r.title_en }}</div>
+      <div class="s">{{ area_name(r.area) }}{% if r.block_code %} · {{ r.block_code }}{% endif %} ·
+        {{ r.when }}
+        · from {{ r.start_date }}{% if r.needs_weight %} · weigh{% endif %}{% if r.needs_photo %} · photo{% endif %}{% if r.title_sw %}<br>{{ r.title_sw }}{% endif %}</div></div>
+    <form method="post" style="align-self:center"><input type="hidden" name="action" value="toggle"><input type="hidden" name="rid" value="{{ r.id }}">
+      <button class="btn small ghost" type="submit">{{ 'Stop' if r.active else 'Restart' }}</button></form>
+  </div>
+  {% else %}<div><div class="s">No routine jobs yet.</div></div>{% endfor %}
+</div>
+
+<details class="more">
+  <summary class="btn dash block" style="color:#1F5130">+ Add a routine job</summary>
+  <form class="card" method="post" style="margin-top:10px">
+    <input type="hidden" name="action" value="add">
+    <div class="grid2">
+      <label class="f">Who *<select name="worker_id" required><option value="">—</option>{% for w in staff %}<option value="{{ w.id }}">{{ w.name }}</option>{% endfor %}</select></label>
+      <label class="f">Area *<select name="area">{% for a in areas %}<option value="{{ a[0] }}">{{ a[1] }}</option>{% endfor %}</select></label>
+    </div>
+    <label class="f">Job in English *<input type="text" name="title_en" required></label>
+    <label class="f">Job in Kiswahili<input type="text" name="title_sw"></label>
+    <div class="grid2">
+      <label class="f">How often *<select name="frequency" id="freq"><option value="daily">Every day</option><option value="weekly">Once a week</option><option value="every">Every N days</option></select></label>
+      <label class="f">Starting<input type="date" name="start_date" value="{{ today }}"></label>
+    </div>
+    <div class="days" id="fDaily">{% for i in range(7) %}<label><input type="checkbox" name="days" value="{{ i }}" checked>{{ weekdays[i][:3] }}</label>{% endfor %}</div>
+    <label class="f" id="fWeekly" hidden>Day<select name="weekday">{% for i in range(7) %}<option value="{{ i }}">{{ weekdays[i] }}</option>{% endfor %}</select></label>
+    <label class="f" id="fEvery" hidden>Every how many days<input type="number" name="every_days" value="14" min="1"></label>
+    <label class="f">Block<select name="block_id"><option value="">—</option>{% for b in blocks %}<option value="{{ b.id }}">{{ b.code }} · {{ b.name }}</option>{% endfor %}</select></label>
+    <label class="check"><input type="checkbox" name="needs_weight">Ask for the weight (kg)</label>
+    <label class="check"><input type="checkbox" name="needs_photo">Ask for a photo</label>
+    <button class="btn go" type="submit">Add</button>
+  </form>
+</details>
+
+<h2 class="sec">{{ t('settings') }}</h2>
+<form class="card" method="post"><input type="hidden" name="action" value="settings">
+  <label class="f">Who confirms each day<select name="farm_supervisor_worker_id"><option value="">—</option>{% for w in staff %}<option value="{{ w.id }}" {{ 'selected' if sup and sup.id==w.id }}>{{ w.name }}</option>{% endfor %}</select></label>
+  <label class="f">Who looks after the apiary (told before every spray)<select name="farm_apiary_worker_id"><option value="">—</option>{% for w in staff %}<option value="{{ w.id }}" {{ 'selected' if keeper and keeper.id==w.id }}>{{ w.name }}</option>{% endfor %}</select></label>
+  <p class="meta" style="margin:0">The person who confirms needs their own login, linked to their name on the Users page.</p>
+  <button class="btn out" type="submit">Save</button>
+</form>
+<script>
+(function(){var f=document.getElementById('freq');function u(){document.getElementById('fDaily').hidden=f.value!=='daily';
+  document.getElementById('fWeekly').hidden=f.value!=='weekly';document.getElementById('fEvery').hidden=f.value!=='every';}
+  f.addEventListener('change',u);u();})();
+</script>
+{% endblock %}

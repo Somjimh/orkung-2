@@ -64,6 +64,7 @@ def init_db(app):
     _add_columns(conn, "users", [("worker_id", "INTEGER REFERENCES workers(id)")])
     _add_columns(conn, "asset_events", [("meter_hours", "REAL")])
     _add_columns(conn, "assets", [("service_hours", "REAL")])
+    _add_columns(conn, "stock_items", [("bee_harmful", "INTEGER")])
     conn.commit()
     conn.close()
     return fresh

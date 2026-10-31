@@ -572,3 +572,87 @@ CREATE TABLE IF NOT EXISTS generator_runs (
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_genruns ON generator_runs(asset_id, run_date);
+
+-- =============================================================================
+-- Farm app (Nov 2026): routines that make each worker's daily job list, the jobs
+-- themselves, the day's confirmation, and spray records.
+-- =============================================================================
+
+-- A job that comes back on a schedule, owned by one worker.
+CREATE TABLE IF NOT EXISTS routines (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    worker_id INTEGER NOT NULL REFERENCES workers(id),
+    area TEXT NOT NULL,                             -- livestock / apiary / bananas / fodder / nursery / water / spraying / general
+    title_en TEXT NOT NULL,
+    title_sw TEXT,
+    frequency TEXT NOT NULL CHECK(frequency IN ('daily','weekly','every')),
+    days TEXT NOT NULL DEFAULT '0123456',           -- daily: weekdays it runs (0 = Monday)
+    weekday INTEGER,                                -- weekly: 0 = Monday
+    every_days INTEGER,                             -- every: e.g. 14 for lucerne
+    start_date TEXT NOT NULL,                       -- first day it applies
+    block_id INTEGER REFERENCES crop_blocks(id),
+    needs_weight INTEGER NOT NULL DEFAULT 0,        -- ask for kg when done
+    needs_photo INTEGER NOT NULL DEFAULT 0,         -- ask for a photo when done
+    active INTEGER NOT NULL DEFAULT 1,
+    created_by INTEGER REFERENCES users(id),
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- One job on one day for one person: from a routine, or added on the day.
+CREATE TABLE IF NOT EXISTS job_tasks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_date TEXT NOT NULL,
+    routine_id INTEGER REFERENCES routines(id),
+    worker_id INTEGER NOT NULL REFERENCES workers(id),
+    area TEXT NOT NULL,
+    title_en TEXT NOT NULL,
+    title_sw TEXT,
+    block_id INTEGER REFERENCES crop_blocks(id),
+    needs_weight INTEGER NOT NULL DEFAULT 0,
+    needs_photo INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','done','not_done')),
+    qty REAL,
+    unit TEXT,
+    photo TEXT,                                     -- file name in the farm-photos folder
+    note TEXT,
+    done_at TEXT,
+    done_by INTEGER REFERENCES users(id),
+    created_by INTEGER REFERENCES users(id),
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(task_date, routine_id)
+);
+CREATE INDEX IF NOT EXISTS idx_job_tasks_day ON job_tasks(task_date, worker_id);
+
+-- The supervisor's sign-off of a day.
+CREATE TABLE IF NOT EXISTS day_confirmations (
+    work_date TEXT PRIMARY KEY,
+    confirmed_by INTEGER NOT NULL REFERENCES users(id),
+    confirmed_at TEXT NOT NULL DEFAULT (datetime('now')),
+    note TEXT
+);
+
+-- Every spray, with what the store issue alone doesn't hold.
+CREATE TABLE IF NOT EXISTS spray_records (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    spray_date TEXT NOT NULL,
+    spray_time TEXT,
+    block_id INTEGER NOT NULL REFERENCES crop_blocks(id),
+    item_id INTEGER REFERENCES stock_items(id),     -- set when it came from the store
+    product TEXT NOT NULL,
+    amount REAL NOT NULL,
+    unit TEXT NOT NULL,
+    water_l REAL,
+    pest TEXT,
+    worker_id INTEGER REFERENCES workers(id),
+    ppe INTEGER NOT NULL DEFAULT 0,                 -- gloves and mask worn
+    phi_days INTEGER,
+    safe_date TEXT,
+    bee_harmful INTEGER NOT NULL DEFAULT 0,
+    bee_note TEXT,
+    photo TEXT,
+    cost REAL,
+    notes TEXT,
+    created_by INTEGER REFERENCES users(id),
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_spray_date ON spray_records(spray_date);

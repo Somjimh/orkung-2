@@ -1,0 +1,54 @@
+{% extends "farm/_base.html" %}
+{% from "farm/_ui.html" import hero with context %}
+{% block title %}Orkung · {{ t('report_of') }} {{ d.isoformat() }}{% endblock %}
+{% block hero %}
+{% call hero(area.bg if area else '#00695C', area.fg if area else '#FFFFFF', url_for('farmapp.home')) %}
+  <div>
+    <h1>{% if area %}{{ area_name(area.key) }}{% else %}{{ t('report_of') }}{% endif %}</h1>
+    <div class="sub">{{ day_text }} · {% if conf %}{{ t('confirmed_by') }} {{ conf.full_name }}{% else %}{{ t('not_confirmed') }}{% endif %}</div>
+  </div>
+  <div class="stats">
+    <div class="stat"><b>{{ people|length }}</b><span>{{ t('people') }}</span></div>
+    <div class="stat"><b>{{ done }}/{{ total }}</b><span>{{ t('jobs_done') }}</span></div>
+    <div class="stat"><b>{{ sprays|length }}</b><span>{{ t('spray_short') }}</span></div>
+  </div>
+  <div class="daynav">
+    <a href="{{ url_for('farmapp.report', d=prev, area=area.key if area else None) }}">‹ {{ prev[8:] }}/{{ prev[5:7] }}</a>
+    {% if not is_today %}<a href="{{ url_for('farmapp.report', area=area.key if area else None) }}">{{ t('today') }}</a>
+    <a href="{{ url_for('farmapp.report', d=next, area=area.key if area else None) }}">{{ next[8:] }}/{{ next[5:7] }} ›</a>{% endif %}
+  </div>
+{% endcall %}
+{% endblock %}
+{% block content %}
+{% if can_confirm and not conf %}<a class="btn go block" href="{{ url_for('farmapp.confirm', d=d.isoformat()) }}">{{ t('confirm_day') }}</a>{% endif %}
+
+<h2 class="sec">{{ t('needs_you') }}</h2>
+{% for level, text in needs %}<div class="note {{ level }}">{{ text }}</div>{% else %}<div class="card"><div class="meta">{{ t('nothing_needs') }}</div></div>{% endfor %}
+
+<h2 class="sec">{{ t('who_did_what') }}</h2>
+{% if people %}
+<div class="list">
+  {% for p in people %}
+  <div>
+    <div><div class="t">{{ p.name }}</div>
+      <div class="s">{% for j in p.jobs %}{{ '✓' if j.status=='done' else '✕' if j.status=='not_done' else '·' }} {{ j.title }}{% if j.qty %} ({{ '%g'|format(j.qty) }} kg){% endif %}{% if j.status=='not_done' and j.note %} — {{ j.note }}{% endif %}{% if not loop.last %}<br>{% endif %}{% endfor %}</div></div>
+    <span class="pill {{ 'ok' if p.done == p.jobs|length else 'red' }}" style="align-self:center">{{ p.done }}/{{ p.jobs|length }}</span>
+  </div>
+  {% endfor %}
+</div>
+{% else %}<div class="card"><div class="meta">{{ t('no_jobs') }}</div></div>{% endif %}
+
+{% if weighed %}
+<h2 class="sec">{{ t('weighed') }}</h2>
+<div class="list">{% for j in weighed %}<div><div><div class="t">{{ j.title }}</div><div class="s">{{ j.worker_name }}</div></div>
+  <div class="row" style="flex-wrap:nowrap"><strong style="font-size:17px">{{ '%g'|format(j.qty) }} kg</strong>{% if j.photo %}<a href="{{ url_for('farmapp.photo', name=j.photo) }}"><img class="thumb" src="{{ url_for('farmapp.photo', name=j.photo) }}" alt="{{ t('photo') }}"></a>{% endif %}</div></div>{% endfor %}</div>
+{% endif %}
+
+{% if sprays %}
+<h2 class="sec">{{ t('spray_short') }}</h2>
+<div class="list">{% for s in sprays %}<div><div><div class="t">{{ s.block_code }} · {{ s.product }}</div>
+  <div class="s">{{ '%g'|format(s.amount) }} {{ s.unit }}{% if s.pest %} · {{ s.pest }}{% endif %} · {{ s.worker_name or '—' }}{% if s.bee_harmful %} · {{ t('harmful_bees').lower() }}{% endif %}</div></div>
+  {% if s.safe_date %}<span class="pill red" style="align-self:center">{{ s.safe_date }}</span>{% endif %}</div>{% endfor %}</div>
+{% endif %}
+{% if conf and conf.note %}<div class="note amber">{{ conf.full_name }}: {{ conf.note }}</div>{% endif %}
+{% endblock %}

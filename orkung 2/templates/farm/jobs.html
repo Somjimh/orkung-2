@@ -1,0 +1,106 @@
+{% extends "farm/_base.html" %}
+{% from "farm/_ui.html" import hero with context %}
+{% block title %}Orkung · {{ t('my_jobs') }}{% endblock %}
+{% block hero %}
+{% call hero('#6A1B9A', '#FFFFFF', url_for('farmapp.home')) %}
+  <div>
+    <h1>{% if who and not pick %}{{ t('my_jobs') }}{% elif who %}{{ t('jobs_for') }} {{ who.name }}{% else %}{{ t('jobs_today') }}{% endif %}</h1>
+    <div class="sub">{% if who %}{{ who.name }} · {% endif %}{{ day_text }}</div>
+  </div>
+  {% if total %}
+  <div class="bar" aria-hidden="true"><i style="width: {{ (100 * done / total)|round|int }}%"></i></div>
+  <div style="font-size:14px;font-weight:800">{{ done }} {{ t('of') }} {{ total }} · {{ t('jobs_done') }}</div>
+  {% endif %}
+  <div class="daynav">
+    <a href="{{ url_for('farmapp.my_jobs', d=prev, w=who.id if who and pick else None) }}">‹ {{ prev[8:] }}/{{ prev[5:7] }}</a>
+    {% if not is_today %}<a href="{{ url_for('farmapp.my_jobs', w=who.id if who and pick else None) }}">{{ t('today') }}</a>
+    <a href="{{ url_for('farmapp.my_jobs', d=next, w=who.id if who and pick else None) }}">{{ next[8:] }}/{{ next[5:7] }} ›</a>{% endif %}
+  </div>
+{% endcall %}
+{% endblock %}
+{% block content %}
+{% if pick %}
+<form method="get" class="row" style="flex-wrap:nowrap">
+  <input type="hidden" name="d" value="{{ d.isoformat() }}">
+  <label class="f" style="flex:1">{{ t('pick_person') }}
+    <select name="w" onchange="this.form.submit()">{% for w in staff %}<option value="{{ w.id }}" {{ 'selected' if who and w.id==who.id }}>{{ w.name }}</option>{% endfor %}</select></label>
+  <noscript><button class="btn out" type="submit" style="align-self:flex-end">OK</button></noscript>
+</form>
+{% endif %}
+
+{% if not who %}
+  <div class="note amber">{{ t('pick_person') }}.</div>
+{% else %}
+  {% if not jobs %}<div class="card"><div class="meta">{{ t('no_jobs') }}</div></div>{% endif %}
+  {% for j in jobs %}
+    {% set a = j.area_info %}
+    {% if j.status == 'open' %}
+    <form class="card" method="post" action="{{ url_for('farmapp.job_done', tid=j.id) }}" enctype="multipart/form-data">
+      <input type="hidden" name="d" value="{{ d.isoformat() }}">
+      <div class="row">
+        <span class="chip" style="background: {{ a.bg }}; color: {{ a.fg }}">{{ area_name(j.area)|upper }}{% if j.block_code %} · {{ j.block_code }}{% endif %}</span>
+        {% if j.late > 0 %}<span class="pill red">{{ t('overdue') }} · {{ j.late }} {{ t('days') }}</span>{% endif %}
+        {% if j.frequency=='every' and j.every_days %}<span class="pill gray">{{ j.every_days }} {{ t('days') }}</span>{% endif %}
+      </div>
+      <h3>{{ j.title }}</h3>
+      {% if lang_now()=='sw' and j.title_sw and j.title_sw != j.title_en %}<div class="meta">{{ j.title_en }}</div>{% elif lang_now()=='en' and j.title_sw and j.title_sw != j.title_en %}<div class="meta">{{ j.title_sw }}</div>{% endif %}
+      {% if can_edit %}
+        {% if j.needs_weight %}<label class="f">{{ t('weight_kg') }} *<input type="number" name="qty" step="0.1" min="0" inputmode="decimal" required></label>{% endif %}
+        {% if j.needs_photo %}<label class="f">{{ t('photo') }} *<input type="file" name="photo" accept="image/*" capture="environment" required></label>{% endif %}
+        <details class="more"><summary class="meta" style="font-weight:900">+ {{ t('note') }}{% if not j.needs_photo %} · {{ t('photo') }}{% endif %}</summary>
+          <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
+            <input type="text" name="note" aria-label="{{ t('note') }}">
+            {% if not j.needs_photo %}<input type="file" name="photo" accept="image/*" capture="environment" aria-label="{{ t('photo') }}">{% endif %}
+          </div></details>
+        <div class="btns">
+          <button class="btn go" type="submit">{{ t('mark_done') }}</button>
+          <button class="btn ghost" type="button" onclick="this.closest('form').nextElementSibling.hidden=false;this.closest('form').hidden=true">{{ t('couldnt') }}</button>
+        </div>
+      {% endif %}
+    </form>
+    {% if can_edit %}
+    <form class="card miss" method="post" action="{{ url_for('farmapp.job_not_done', tid=j.id) }}" hidden>
+      <input type="hidden" name="d" value="{{ d.isoformat() }}">
+      <h3>{{ j.title }}</h3>
+      <label class="f">{{ t('reason') }} *<input type="text" name="note" required></label>
+      <button class="btn red" type="submit">{{ t('save') }}</button>
+    </form>
+    {% endif %}
+    {% else %}
+    <div class="card {{ 'done' if j.status=='done' else 'miss' }}">
+      <div class="row between" style="flex-wrap:nowrap;align-items:flex-start">
+        <div>
+          <div style="font-size:16px;font-weight:900">{{ '✓' if j.status=='done' else '✕' }} {{ j.title }}</div>
+          <div class="meta">{{ area_name(j.area) }}{% if j.block_code %} · {{ j.block_code }}{% endif %}{% if j.qty %} · {{ '%g'|format(j.qty) }} kg{% endif %}{% if j.note %} · {{ j.note }}{% endif %}</div>
+        </div>
+        {% if j.photo %}<a href="{{ url_for('farmapp.photo', name=j.photo) }}"><img class="thumb" src="{{ url_for('farmapp.photo', name=j.photo) }}" alt="{{ t('photo') }}: {{ j.title }}"></a>{% endif %}
+      </div>
+      <div class="row between">
+        <span class="pill {{ 'ok' if j.status=='done' else 'amber' }}">{{ t('done') if j.status=='done' else t('not_done') }}</span>
+        {% if can_edit %}<form method="post" action="{{ url_for('farmapp.job_reopen', tid=j.id) }}"><input type="hidden" name="d" value="{{ d.isoformat() }}"><button class="btn small ghost" type="submit">↺</button></form>{% endif %}
+      </div>
+    </div>
+    {% endif %}
+  {% endfor %}
+
+  {% if can_edit %}
+  <details class="more">
+    <summary class="btn dash block" style="color:#6A1B9A">+ {{ t('add_job') }}</summary>
+    <form class="card" method="post" action="{{ url_for('farmapp.job_add') }}" enctype="multipart/form-data" style="margin-top:10px">
+      <input type="hidden" name="d" value="{{ d.isoformat() }}">
+      {% if pick %}<input type="hidden" name="worker_id" value="{{ who.id }}">{% endif %}
+      <label class="f">{{ t('what_job') }} *<input type="text" name="title" required></label>
+      <div class="grid2">
+        <label class="f">{{ t('area') }}<select name="area">{% for a in areas %}{% if a[0] != 'spraying' %}<option value="{{ a[0] }}">{{ a[2] if lang_now()=='sw' else a[1] }}</option>{% endif %}{% endfor %}</select></label>
+        <label class="f">{{ t('block') }}<select name="block_id"><option value="">—</option>{% for b in blocks %}<option value="{{ b.id }}">{{ b.code }}</option>{% endfor %}</select></label>
+      </div>
+      <label class="f">{{ t('weight_kg') }}<input type="number" name="qty" step="0.1" min="0" inputmode="decimal"></label>
+      <label class="f">{{ t('photo') }}<input type="file" name="photo" accept="image/*" capture="environment"></label>
+      <label class="f">{{ t('note') }}<input type="text" name="note"></label>
+      <button class="btn go" type="submit">{{ t('save') }}</button>
+    </form>
+  </details>
+  {% endif %}
+  {% if sup %}<div class="note amber">{{ t('godfrey_confirms') }} ({{ sup.name }})</div>{% endif %}
+{% endif %}
+{% endblock %}

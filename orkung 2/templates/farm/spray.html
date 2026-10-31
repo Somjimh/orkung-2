@@ -1,0 +1,77 @@
+{% extends "farm/_base.html" %}
+{% from "farm/_ui.html" import hero with context %}
+{% block title %}Orkung · {{ t('spray') }}{% endblock %}
+{% block hero %}
+{% call hero('#C62828', '#FFFFFF', url_for('farmapp.home')) %}
+  <div>
+    <h1>{{ t('spray') }}</h1>
+    <div class="sub">{{ t('spray_sub') }}</div>
+  </div>
+{% endcall %}
+{% endblock %}
+{% block content %}
+{% if can_edit %}
+{% if not blocks %}
+<div class="note amber">{{ 'Ongeza mashamba kwanza (Kumbukumbu zote › Mazao).' if lang_now()=='sw' else 'Add the crop blocks first (Full records › Crops & Blocks).' }}</div>
+{% else %}
+<form method="post" enctype="multipart/form-data" class="pad" style="padding:0" id="sprayForm">
+  <div class="grid2">
+    <label class="f">{{ t('date') }}<input type="date" name="spray_date" value="{{ today }}" max="{{ today }}"></label>
+    <label class="f">{{ t('time') }}<input type="time" name="spray_time" value="{{ now }}"></label>
+  </div>
+  <label class="f">{{ t('block') }} *<select name="block_id" required><option value="">—</option>{% for b in blocks %}<option value="{{ b.id }}">{{ b.code }} · {{ b.name }}{% if b.organic %} (organic){% endif %}</option>{% endfor %}</select></label>
+  <label class="f">{{ t('product') }} *
+    <select name="item" id="itemSel" required>
+      <option value="">—</option>
+      {% for it in items %}<option value="{{ it.id }}" data-bee="{{ 1 if it.bee_harmful else 0 }}" data-phi="{{ it.phi_days or '' }}" data-unit="{{ it.unit }}">{{ it.name }}{% if it.phi_days %} · {{ it.phi_days }} {{ t('days') }}{% endif %}</option>{% endfor %}
+      <option value="other">{{ t('other_product') }}</option>
+    </select></label>
+  <div id="otherBox" hidden style="display:flex;flex-direction:column;gap:10px">
+    <label class="f">{{ t('product_name') }} *<input type="text" name="product"></label>
+    <label class="f">{{ t('wait_days') }}<input type="number" name="phi_days" min="0" step="1" inputmode="numeric"></label>
+    <label class="check"><input type="checkbox" name="bee_harmful" id="beeOther">{{ t('harmful_bees') }}</label>
+  </div>
+  <div class="note warn" id="beeWarn" hidden>
+    {{ t('harmful_bees') }}. {{ 'Nyunyizia jioni tu (baada ya saa 11 jioni), na umwambie' if lang_now()=='sw' else 'Spray in the evening only (after 5 pm), and tell' }} {{ keeper.name if keeper else ('mtunza nyuki' if lang_now()=='sw' else 'the apiary keeper') }} {{ 'kwanza.' if lang_now()=='sw' else 'first.' }}
+    <label class="check" style="margin-top:6px"><input type="checkbox" name="bee_ack" id="beeAck">{{ t('bee_ack') }}</label>
+  </div>
+  <div class="grid2">
+    <label class="f">{{ t('amount') }} *<div class="row" style="flex-wrap:nowrap"><input type="number" name="amount" step="0.01" min="0" required inputmode="decimal">
+      <select name="unit" style="width:auto"><option value="ml">ml</option><option value="l">L</option><option value="g">g</option><option value="kg">kg</option></select></div></label>
+    <label class="f">{{ t('water_l') }}<input type="number" name="water_l" step="0.5" min="0" inputmode="decimal"></label>
+  </div>
+  <label class="f">{{ t('pest') }}<input type="text" name="pest"></label>
+  {% if self_only %}<input type="hidden" name="worker_id" value="{{ me.id }}"><div class="meta">{{ t('sprayed_by') }}: <strong>{{ me.name }}</strong></div>
+  {% else %}<label class="f">{{ t('sprayed_by') }} *<select name="worker_id" required><option value="">—</option>{% for w in staff %}<option value="{{ w.id }}" {{ 'selected' if me and me.id==w.id }}>{{ w.name }}</option>{% endfor %}</select></label>{% endif %}
+  <label class="check"><input type="checkbox" name="ppe">{{ t('ppe') }}</label>
+  <label class="f">{{ t('label_photo') }}<input type="file" name="photo" accept="image/*" capture="environment"></label>
+  <label class="check" style="font-size:13px"><input type="checkbox" name="confirm_organic">{{ 'Mthibitishaji ameruhusu dawa hii kwenye shamba la kikaboni' if lang_now()=='sw' else 'The certifier approved this product on an organic block' }}</label>
+  <button class="btn red block" type="submit">{{ t('save') }}</button>
+  <div class="meta" style="text-align:center">{{ 'Dawa kutoka stoo inapunguzwa yenyewe.' if lang_now()=='sw' else 'A product from the store comes off the shelf automatically.' }}</div>
+</form>
+<script>
+(function(){
+  var sel=document.getElementById('itemSel'),box=document.getElementById('otherBox'),warn=document.getElementById('beeWarn'),
+      ack=document.getElementById('beeAck'),beeO=document.getElementById('beeOther'),name=document.querySelector('[name=product]');
+  function upd(){var o=sel.options[sel.selectedIndex]||{};var other=sel.value==='other';box.hidden=!other;name.required=other;
+    var bee=(o.getAttribute&&o.getAttribute('data-bee')==='1')||(other&&beeO.checked);warn.hidden=!bee;ack.required=bee;}
+  sel.addEventListener('change',upd);beeO.addEventListener('change',upd);upd();
+})();
+</script>
+{% endif %}
+{% endif %}
+
+<h2 class="sec">{{ t('recent_sprays') }}</h2>
+{% if recent %}
+<div class="list">
+  {% for s in recent %}
+  <div>
+    <div><div class="t">{{ s.block_code }} · {{ s.product }}</div>
+      <div class="s">{{ s.spray_date }}{% if s.spray_time %} {{ s.spray_time }}{% endif %} · {{ '%g'|format(s.amount) }} {{ s.unit }}{% if s.water_l %} / {{ '%g'|format(s.water_l) }} L{% endif %}{% if s.pest %} · {{ s.pest }}{% endif %} · {{ s.worker_name or '—' }}{% if not s.ppe %} · <strong style="color:#8E1B12">{{ 'bila glavu/barakoa' if lang_now()=='sw' else 'no gloves/mask' }}</strong>{% endif %}</div></div>
+    <div style="text-align:right">{% if s.safe_date %}<span class="pill {{ 'red' if s.safe_date > today else 'ok' }}">{{ s.safe_date }}</span>{% endif %}
+      {% if s.photo %}<div><a href="{{ url_for('farmapp.photo', name=s.photo) }}" style="font-size:13px;font-weight:800">{{ t('photo') }}</a></div>{% endif %}</div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}<div class="card"><div class="meta">—</div></div>{% endif %}
+{% endblock %}

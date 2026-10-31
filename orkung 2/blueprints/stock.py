@@ -274,11 +274,12 @@ def add_item():
         flash("An item with that name already exists.", "error")
         return redirect(url_for("stock.index"))
     new_id = db.execute("INSERT INTO stock_items (name, category, pack_size, unit, price_per_pack, reorder_level, notes, "
-                        "organic_ok, phi_days, active_ingredient) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                        "organic_ok, phi_days, active_ingredient, bee_harmful) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                         (name, request.form.get("category", "medicine"), size_b, base,
                          request.form.get("price_per_pack", type=float), (request.form.get("reorder_packs", type=float) or 0) * size_b,
                          request.form.get("notes"), 1 if request.form.get("organic_ok") else 0,
-                         request.form.get("phi_days", type=int), request.form.get("active_ingredient") or None))
+                         request.form.get("phi_days", type=int), request.form.get("active_ingredient") or None,
+                         1 if request.form.get("bee_harmful") else 0))
     db.audit(g.user, "create", "stock_item", new_id, f"Added stock item {name}")
     flash("Item added. Now record a purchase or count to put stock on it.", "success")
     return redirect(url_for("stock.item", item_id=new_id))
@@ -294,11 +295,11 @@ def edit_item(item_id):
     price = request.form.get("price_per_pack", type=float)
     reorder = request.form.get("reorder_packs", type=float)
     db.execute("UPDATE stock_items SET price_per_pack=?, reorder_level=?, category=?, medicine_id=?, notes=?, "
-               "organic_ok=?, phi_days=?, active_ingredient=? WHERE id=?",
+               "organic_ok=?, phi_days=?, active_ingredient=?, bee_harmful=? WHERE id=?",
                (price, (reorder or 0) * it["pack_size"], request.form.get("category") or it["category"],
                 request.form.get("medicine_id", type=int) or None, request.form.get("notes"),
                 1 if request.form.get("organic_ok") else 0, request.form.get("phi_days", type=int),
-                request.form.get("active_ingredient") or None, item_id))
+                request.form.get("active_ingredient") or None, 1 if request.form.get("bee_harmful") else 0, item_id))
     db.audit(g.user, "update", "stock_item", item_id, f"Updated {it['name']}: price {price}, reorder {reorder} packs")
     flash("Saved.", "success")
     return redirect(url_for("stock.item", item_id=item_id))

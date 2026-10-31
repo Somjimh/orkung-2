@@ -1,0 +1,35 @@
+{% extends "farm/_base.html" %}
+{% from "farm/_ui.html" import hero with context %}
+{% block title %}Orkung · {{ t('confirm_day') }}{% endblock %}
+{% block hero %}
+{% call hero('#6A1B9A', '#FFFFFF', url_for('farmapp.home')) %}
+  <div>
+    <h1>{{ t('confirm_day') }}</h1>
+    <div class="sub">{{ day_text }}{% if conf %} · {{ t('confirmed') }} ✓{% endif %}</div>
+  </div>
+{% endcall %}
+{% endblock %}
+{% block content %}
+<form method="post" class="pad" style="padding:0">
+  <input type="hidden" name="d" value="{{ d.isoformat() }}">
+  <p class="meta" style="margin:0;font-weight:700">{{ 'Angalia kila mtu. Kama kazi iliandikwa imekamilika lakini haikufanyika, chagua "Haijafanyika".' if lang_now()=='sw' else 'Check each person. If a job was ticked done but was not really done, choose "Not done".' }}</p>
+  {% for name, js in people.items() %}
+  <div class="card">
+    <h3>{{ name }}</h3>
+    {% for j in js %}
+    <div class="row between" style="flex-wrap:nowrap;border-top:1px solid #E6ECE4;padding-top:8px">
+      <div><div style="font-weight:900">{{ j.title }}</div>
+        <div class="meta">{{ t('done') if j.status=='done' else t('not_done') if j.status=='not_done' else t('open') }}{% if j.qty %} · {{ '%g'|format(j.qty) }} kg{% endif %}{% if j.note %} · {{ j.note }}{% endif %}</div></div>
+      {% if j.status == 'done' %}
+      <label class="check" style="font-size:13px;white-space:nowrap"><input type="checkbox" name="m_{{ j.id }}" value="not_done">{{ t('not_done') }}</label>
+      {% else %}<span class="pill {{ 'amber' if j.status=='not_done' else 'gray' }}">{{ t('not_done') if j.status=='not_done' else t('open') }}</span>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="card"><div class="meta">{{ t('no_jobs') }}</div></div>
+  {% endfor %}
+  <label class="f">{{ t('note') }}<input type="text" name="note" value="{{ conf.note if conf and conf.note else '' }}"></label>
+  <button class="btn go block" type="submit">{{ t('confirm_day') }} ✓</button>
+</form>
+{% endblock %}
