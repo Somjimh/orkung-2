@@ -58,6 +58,14 @@ def init_db(app):
             _upgrade_user_roles(app.config["DATABASE"])
         except Exception as exc:  # never stop the site starting; the old roles keep working
             app.logger.error("Storekeeper role upgrade skipped: %s", exc)
+    # Daily log (Nov 2026): a login can be linked to a staff member, and generators
+    # keep an hour meter. Added after the roles upgrade so a rebuilt users table keeps them.
+    conn = sqlite3.connect(app.config["DATABASE"])
+    _add_columns(conn, "users", [("worker_id", "INTEGER REFERENCES workers(id)")])
+    _add_columns(conn, "asset_events", [("meter_hours", "REAL")])
+    _add_columns(conn, "assets", [("service_hours", "REAL")])
+    conn.commit()
+    conn.close()
     return fresh
 
 

@@ -20,8 +20,35 @@ IMPORT_TEMPLATE_HEADER = ["tag_id", "eid", "name", "species", "breed", "sex", "d
 @auth.login_required
 @auth.require_roles("admin")
 def users():
-    rows = db.query("SELECT * FROM users ORDER BY active DESC, full_name")
-    return render_template("admin_users.html", users=rows, role_choices=auth.ROLES)
+    rows = db.query("SELECT u.*, w.name AS worker_name FROM users u LEFT JOIN workers w ON w.id=u.worker_id "
+                    "ORDER BY u.active DESC, u.full_name")
+    staff = db.query("SELECT id, name FROM workers WHERE active=1 ORDER BY name")
+    return render_template("admin_users.html", users=rows, role_choices=auth.ROLES, staff=staff)
+
+
+@bp.route("/users/<int:user_id>/staff", methods=["POST"])
+@auth.login_required
+@auth.require_roles("admin")
+def link_staff(user_id):
+    """Link a login to a staff member. A farm worker linked this way records only
+    their own work on the Today page."""
+    u = db.query("SELECT * FROM users WHERE id=?", (user_id,), one=True)
+    if not u:
+        abort(404)
+    wid = request.form.get("worker_id", type=int) or None
+    if wid and not db.query("SELECT 1 FROM workers WHERE id=?", (wid,), one=True):
+        abort(400)
+    if wid:
+        other = db.query("SELECT username FROM users WHERE worker_id=? AND id!=?", (wid, user_id), one=True)
+        if other:
+            flash(f"That staff member is already linked to the login '{other['username']}'.", "error")
+            return redirect(url_for("admin.users"))
+    db.execute("UPDATE users SET worker_id=? WHERE id=?", (wid, user_id))
+    w = db.query("SELECT name FROM workers WHERE id=?", (wid,), one=True) if wid else None
+    db.audit(g.user, "update", "user", user_id, f"{u['username']} linked to staff member {w['name'] if w else '(none)'}")
+    flash(f"{u['username']} is now linked to {w['name']}." if w else f"{u['username']} is no longer linked to a staff member.",
+          "success")
+    return redirect(url_for("admin.users"))
 
 
 @bp.route("/users/add", methods=["POST"])
@@ -39,8 +66,12 @@ def add_user():
     if exists:
         flash("That username already exists.", "error")
         return redirect(url_for("admin.users"))
-    new_id = db.execute("INSERT INTO users (username, password_hash, full_name, role, email) VALUES (?,?,?,?,?)",
-                        (username, generate_password_hash(password), full_name, role, request.form.get("email")))
+    wid = request.form.get("worker_id", type=int) or None
+    if wid and db.query("SELECT 1 FROM users WHERE worker_id=?", (wid,), one=True):
+        flash("That staff member already has a login linked to them.", "error")
+        return redirect(url_for("admin.users"))
+    new_id = db.execute("INSERT INTO users (username, password_hash, full_name, role, email, worker_id) VALUES (?,?,?,?,?,?)",
+                        (username, generate_password_hash(password), full_name, role, request.form.get("email"), wid))
     db.audit(g.user, "create", "user", new_id, f"Created user {username} ({role})")
     flash("User created.", "success")
     return redirect(url_for("admin.users"))

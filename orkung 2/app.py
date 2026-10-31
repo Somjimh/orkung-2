@@ -80,6 +80,7 @@ def create_app(config_object=Config):
     from blueprints.payroll import bp as payroll_bp
     from blueprints.assets import bp as assets_bp
     from blueprints.milestones import bp as milestones_bp
+    from blueprints.today import bp as today_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
@@ -98,6 +99,7 @@ def create_app(config_object=Config):
     app.register_blueprint(payroll_bp)
     app.register_blueprint(assets_bp)
     app.register_blueprint(milestones_bp)
+    app.register_blueprint(today_bp)
 
     return app
 

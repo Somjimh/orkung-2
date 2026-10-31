@@ -34,6 +34,8 @@ PAY_EDIT = ("admin", "manager")                       # draft pay runs, advances
 PAY_APPROVE = ("admin",)                              # approve and lock a pay run
 STORE_EDIT = ("admin", "manager", "worker", "vet", "storekeeper")
 ASSET_EDIT = ("admin", "manager", "storekeeper")      # check out / return / verify / repair
+DAILY_LOG = ("admin", "manager", "worker", "storekeeper")   # add to the Today log
+DAILY_VIEW = DAILY_LOG + ("viewer",)
 
 
 def load_logged_in_user():
@@ -91,18 +93,18 @@ def can_manage():
 # their own permissions server-side -- this only controls what is *offered*
 # in the navigation, per role, so people aren't shown links to pages they
 # can't use.
-FARM = {"crops", "work", "store", "assets", "milestones"}
+FARM = {"today", "crops", "work", "store", "assets", "milestones"}
 NAV_SECTIONS = {
     "admin":   {"dashboard", "animals", "add_animal", "weights", "breeding", "births",
                 "health", "groups", "movements", "tasks", "reports", "admin", "payroll"} | FARM,
     "manager": {"dashboard", "animals", "add_animal", "weights", "breeding", "births",
                 "health", "groups", "movements", "tasks", "reports", "payroll"} | FARM,
     "worker":  {"dashboard", "animals", "add_animal", "weights", "breeding", "births",
-                "health", "groups", "movements", "tasks", "reports", "crops", "store"},
+                "health", "groups", "movements", "tasks", "reports", "today", "crops", "store"},
     "viewer":  {"dashboard", "animals", "weights", "breeding", "births",
                 "health", "groups", "movements", "tasks", "reports", "payroll"} | FARM,
     "vet":     {"dashboard", "animals", "health", "tasks", "reports", "store"},
-    "storekeeper": {"dashboard", "crops", "store", "assets", "milestones", "tasks", "reports"},
+    "storekeeper": {"dashboard", "today", "crops", "store", "assets", "milestones", "tasks", "reports"},
 }
 
 

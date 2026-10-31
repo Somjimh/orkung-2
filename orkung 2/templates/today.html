@@ -1,0 +1,216 @@
+{% extends "base.html" %}
+{% block title %}Today {{ d }} - {{ app_name }}{% endblock %}
+{% block heading %}Today on the farm{% endblock %}
+{% block content %}
+{% macro who_field() %}
+  {% if self_only %}
+    <div class="field"><label>Who</label><div class="pill green" style="align-self:flex-start;">{{ me.name }}</div></div>
+  {% else %}
+    <div class="field"><label>Who *</label><select name="worker_id" required><option value="">—</option>
+      {% for w in staff %}<option value="{{ w.id }}" {{ 'selected' if me and me.id==w.id }}>{{ w.name }}</option>{% endfor %}</select></div>
+  {% endif %}
+{% endmacro %}
+{% macro remove_btn(endpoint, id_name, id_val, created_by, created_at) %}
+  {% if can_add and (is_manager or (created_by == uid and (created_at or '')[:10] == today_iso)) %}
+  <form method="post" action="{{ url_for(endpoint, **{id_name: id_val}) }}" onsubmit="return confirm('Remove this entry?')">
+    <button class="btn small subtle" type="submit">Remove</button></form>
+  {% endif %}
+{% endmacro %}
+
+<div class="btn-row section no-print" style="justify-content:space-between;">
+  <div class="btn-row">
+    <a class="btn small secondary" href="{{ url_for('today.index', d=prev) }}">&larr; Previous day</a>
+    <strong style="font-size:1.05rem;color:var(--green-900);">{{ day_name }}{% if is_today %} <span class="pill green">today</span>{% endif %}</strong>
+    {% if not is_today %}<a class="btn small secondary" href="{{ url_for('today.index', d=next) }}">Next day &rarr;</a>{% endif %}
+  </div>
+  <form method="get" class="btn-row"><input type="date" name="d" value="{{ d }}" max="{{ today_iso }}" style="width:170px;min-height:36px;padding:.3rem .5rem;"><button class="btn small subtle" type="submit">Go</button></form>
+</div>
+
+{% if self_only %}<div class="flash info">You are logged in as <strong>{{ me.name }}</strong>. Everything you add here is recorded as your work.</div>{% endif %}
+{% if blocked and can_add %}<div class="flash info">{{ blocked }} The day is shown for reference.</div>{% endif %}
+{% set editable = can_add and not blocked %}
+
+<div class="grid cols-4 section">
+  <div class="stat-card"><div class="stat-label">At work</div><div class="stat-value">{{ summary.at_work }}</div><div class="stat-sub">{{ summary.jobs }} job{{ '' if summary.jobs==1 else 's' }} recorded</div></div>
+  <div class="stat-card"><div class="stat-label">Feed given</div><div class="stat-value">{{ '%g'|format(summary.feed_kg|round(1)) }} kg</div><div class="stat-sub">{% if summary.feed_cost %}KES {{ '{:,.0f}'.format(summary.feed_cost) }} from the store{% else %}{{ feeds|length }} entr{{ 'y' if feeds|length==1 else 'ies' }}{% endif %}</div></div>
+  <div class="stat-card"><div class="stat-label">Sprays</div><div class="stat-value">{{ summary.sprays }}</div><div class="stat-sub">blocks sprayed</div></div>
+  <div class="stat-card"><div class="stat-label">Generator</div><div class="stat-value">{{ '%g'|format(summary.gen_hours|round(1)) }} h</div><div class="stat-sub">{{ '%g'|format(summary.diesel|round(1)) }} L diesel</div></div>
+</div>
+
+{% if flags %}
+<div class="card section" id="check">
+  <h3>To look at</h3>
+  <ul style="margin:.4rem 0 0;padding-left:0;list-style:none;display:flex;flex-direction:column;gap:.45rem;">
+    {% for level, text in flags %}<li style="display:flex;gap:.5rem;align-items:flex-start;"><span class="pill {{ level }}" style="flex:none;">{{ 'Act' if level=='red' else 'Check' if level=='amber' else 'Note' }}</span><span>{{ text }}</span></li>{% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+<div class="tabs no-print" style="position:sticky;top:0;z-index:3;background:var(--bg,#f4f6f2);">
+  <a href="#jobs">Jobs ({{ jobs|length }})</a><a href="#feed">Feeding ({{ feeds|length }})</a>
+  <a href="#spray">Spraying ({{ sprays|length }})</a><a href="#gen">Generator ({{ runs|length }})</a>
+</div>
+
+{# ------------------------------------------------------------------ Jobs #}
+<div class="card section" id="jobs">
+  <h3>Jobs: who did what</h3>
+  {% if jobs %}<div class="table-wrap"><table class="data"><thead><tr><th>Person</th><th>Job</th><th>Block</th><th>Output</th><th>Hours</th><th>Notes</th><th></th></tr></thead><tbody>
+  {% for l in jobs %}<tr><td data-label="Person"><strong>{{ l.name }}</strong></td><td data-label="Job">{{ l.activity }}{% if l.source=='sheet' %} <span class="pill gray">daily sheet</span>{% endif %}</td>
+    <td data-label="Block">{{ l.block_code or '—' }}</td><td data-label="Output">{{ ('%g'|format(l.quantity) ~ ' ' ~ (l.unit or '')) if l.quantity is not none else '—' }}</td>
+    <td data-label="Hours">{{ '%g'|format(l.hours) if l.hours else '—' }}</td><td data-label="Notes">{{ l.notes or '' }}{% if l.by_name %}<div class="muted small">entered by {{ l.by_name }}</div>{% endif %}</td>
+    <td data-label="">{% if l.source != 'sheet' %}{{ remove_btn('today.delete_job', 'lid', l.id, l.created_by, l.created_at) }}{% endif %}</td></tr>{% endfor %}
+  </tbody></table></div>{% else %}<p class="muted">No jobs recorded yet for this day.</p>{% endif %}
+  {% if editable %}
+  <details {{ 'open' if not jobs }} style="margin-top:.8rem;"><summary class="btn small secondary" style="display:inline-flex;">Add a job</summary>
+  <form method="post" action="{{ url_for('today.add_job') }}" class="form-grid" style="margin-top:.8rem;" data-draft-key="today-job-{{ d }}">
+    <input type="hidden" name="d" value="{{ d }}"><input type="hidden" name="anchor" value="#jobs">
+    {{ who_field() }}
+    <div class="field"><label>Job *</label><select name="activity" required><option value="">—</option>{% for x in activities %}<option>{{ x }}</option>{% endfor %}</select></div>
+    <div class="field"><label>Block</label><select name="block_id"><option value="">—</option>{% for b in blocks %}<option value="{{ b.id }}">{{ b.code }} · {{ b.name }}</option>{% endfor %}</select></div>
+    <div class="field"><label>Hours</label><input type="number" step="0.5" min="0" max="24" name="hours" inputmode="decimal"></div>
+    <div class="field"><label>Output</label><div class="btn-row" style="flex-wrap:nowrap;"><input type="number" step="0.1" min="0" name="quantity" inputmode="decimal"><select name="unit" style="width:auto;"><option value=""></option>{% for u in units %}<option>{{ u }}</option>{% endfor %}</select></div></div>
+    <div class="field"><label>Notes</label><input type="text" name="notes"></div>
+    <div><button class="btn" type="submit">Save job</button></div>
+  </form></details>
+  {% endif %}
+</div>
+
+{# ------------------------------------------------------------------ Feeding #}
+<div class="card section" id="feed">
+  <h3>Feeding</h3>
+  {% if feeds %}<div class="table-wrap"><table class="data"><thead><tr><th>Group</th><th>Feed</th><th>Kg</th><th>Cost</th><th>By</th><th>Notes</th><th></th></tr></thead><tbody>
+  {% for f in feeds %}<tr><td data-label="Group"><strong>{{ f.group_name or f.herd }}</strong></td><td data-label="Feed">{{ f.feed }}{% if f.item_id %} <span class="pill gray">from store</span>{% endif %}</td>
+    <td data-label="Kg">{{ '%g'|format(f.kg) }}</td><td data-label="Cost">{{ ('KES ' ~ '{:,.0f}'.format(f.cost)) if f.cost else '—' }}</td>
+    <td data-label="By">{{ f.worker_name or '—' }}</td><td data-label="Notes">{{ f.notes or '' }}</td>
+    <td data-label="">{% if not f.item_id %}{{ remove_btn('today.delete_feed', 'fid', f.id, f.created_by, f.created_at) }}{% endif %}</td></tr>{% endfor %}
+  </tbody></table></div>{% else %}<p class="muted">No feeding recorded yet for this day.</p>{% endif %}
+  {% if editable %}
+  <details {{ 'open' if not feeds }} style="margin-top:.8rem;"><summary class="btn small secondary" style="display:inline-flex;">Add feeding</summary>
+  <form method="post" action="{{ url_for('today.add_feed') }}" class="form-grid" style="margin-top:.8rem;" data-draft-key="today-feed-{{ d }}">
+    <input type="hidden" name="d" value="{{ d }}"><input type="hidden" name="anchor" value="#feed">
+    <div class="field"><label>Group *</label><select name="group_id"><option value="">— or type below —</option>{% for gr in groups %}<option value="{{ gr.id }}">{{ gr.name }}{% if gr.head %} ({{ gr.head }} head){% endif %}</option>{% endfor %}</select></div>
+    <div class="field"><label>Or herd</label><input type="text" name="herd" placeholder="e.g. All cattle, Calves"></div>
+    <div class="field"><label>Feed *</label><select name="feed" required><option value="">—</option>
+      <optgroup label="Grown on the farm">{% for x in forage %}<option>{{ x }}</option>{% endfor %}</optgroup>
+      {% if stock_feeds %}<optgroup label="From the store (taken off the shelf)">{% for it in stock_feeds %}<option value="store:{{ it.id }}">{{ it.name }}</option>{% endfor %}</optgroup>{% endif %}
+    </select></div>
+    <div class="field"><label>Kg *</label><input type="number" step="0.1" min="0" name="kg" required inputmode="decimal"></div>
+    {{ who_field() }}
+    <div class="field"><label>Notes</label><input type="text" name="notes" placeholder="e.g. morning feed, wilted 12 h"></div>
+    <div><button class="btn" type="submit">Save feeding</button></div>
+  </form></details>
+  {% endif %}
+</div>
+
+{# ------------------------------------------------------------------ Spraying #}
+<div class="card section" id="spray">
+  <h3>Spraying and fertiliser</h3>
+  {% if sprays %}<div class="table-wrap"><table class="data"><thead><tr><th>Block</th><th>Product</th><th>Amount</th><th>Pest / note</th><th>By</th><th>Safe to harvest</th></tr></thead><tbody>
+  {% for s in sprays %}<tr><td data-label="Block"><strong>{{ s.block_code }}</strong></td><td data-label="Product">{{ s.item }}</td>
+    <td data-label="Amount">{{ '%g'|format(s.qty) }} {{ s.unit }}</td><td data-label="Pest / note">{{ s.notes or '' }}</td>
+    <td data-label="By">{{ s.worker_name or '—' }}</td>
+    <td data-label="Safe to harvest">{% if s.safe %}<span class="pill {{ 'amber' if s.safe > today_iso else 'green' }}">{{ s.safe }}</span>{% else %}—{% endif %}</td></tr>{% endfor %}
+  </tbody></table></div>
+  <p class="small muted">To correct a spray, adjust the product in the Store, so the shelf stays right.</p>
+  {% else %}<p class="muted">No spraying recorded for this day.</p>{% endif %}
+  {% if editable %}
+  {% if spray_items and blocks %}
+  <details {{ 'open' if not sprays }} style="margin-top:.8rem;"><summary class="btn small secondary" style="display:inline-flex;">Add spraying</summary>
+  <form method="post" action="{{ url_for('today.add_spray') }}" class="form-grid" style="margin-top:.8rem;">
+    <input type="hidden" name="d" value="{{ d }}"><input type="hidden" name="anchor" value="#spray">
+    <div class="field"><label>Block *</label><select name="block_id" required><option value="">—</option>{% for b in blocks %}<option value="{{ b.id }}">{{ b.code }} · {{ b.name }}{% if b.organic %} (organic){% endif %}</option>{% endfor %}</select></div>
+    <div class="field"><label>Product *</label><select name="item_id" required><option value="">—</option>{% for it in spray_items %}<option value="{{ it.id }}">{{ it.name }}{% if it.phi_days %} · wait {{ it.phi_days }} days{% endif %}{% if not it.organic_ok %} · not organic{% endif %}</option>{% endfor %}</select></div>
+    <div class="field"><label>Amount used *</label><div class="btn-row" style="flex-wrap:nowrap;"><input type="number" step="0.01" min="0" name="amount" required inputmode="decimal">
+      <select name="unit" style="width:auto;"><option>ml</option><option value="l">litres</option><option>g</option><option>kg</option></select></div></div>
+    <div class="field"><label>Pest or disease</label><input type="text" name="pest" placeholder="e.g. thrips, weevil, leaf spot"></div>
+    <div class="field"><label>Rate</label><input type="text" name="rate_note" placeholder="e.g. 20 ml per 20 L"></div>
+    {{ who_field() }}
+    <div class="field" style="grid-column:1/-1;"><label style="display:flex;gap:.5rem;align-items:center;font-weight:400;"><input type="checkbox" name="confirm_organic" style="width:auto;min-height:0;"> The certifier has approved this product on an organic block</label></div>
+    <div><button class="btn" type="submit">Save spraying</button></div>
+  </form></details>
+  {% else %}<p class="small muted" style="margin-top:.6rem;">{% if not blocks %}Add crop blocks first (Crops &amp; Blocks).{% else %}Add the crop chemicals and fertilisers to the Store first; then they can be picked here.{% endif %}</p>{% endif %}
+  {% endif %}
+</div>
+
+{# ------------------------------------------------------------------ Generator #}
+<div class="card section" id="gen">
+  <h3>Generator</h3>
+  {% if gens %}
+  <div class="grid cols-{{ 2 if gens|length > 1 else 1 }}" style="margin-bottom:.8rem;">
+  {% for gs in gens %}
+    <div class="stat-card" style="box-shadow:none;">
+      <div class="stat-label">{{ gs.asset.name }}</div>
+      <div class="stat-value" style="font-size:1.3rem;">{{ ('%g'|format(gs.meter) ~ ' h') if gs.meter is not none else 'No reading yet' }}</div>
+      <div class="stat-sub">
+        {% if gs.state=='due' %}<span class="pill red">Service due</span> {{ '%g'|format(gs.since) }} h since the last service
+        {% elif gs.state=='soon' %}<span class="pill amber">Service soon</span> due at {{ '%g'|format(gs.due_at) }} h
+        {% elif gs.state=='ok' %}<span class="pill green">OK</span> next service at {{ '%g'|format(gs.due_at) }} h
+        {% else %}<span class="pill gray">No service on record</span>{% endif %}
+      </div>
+      <div class="stat-sub">This month: {{ '%g'|format(gs.month_hours|round(1)) }} h · {{ '%g'|format(gs.month_litres|round(1)) }} L{% if gs.l_per_hour %} · {{ '%.1f'|format(gs.l_per_hour) }} L/h{% endif %}{% if gs.month_kes %} · KES {{ '{:,.0f}'.format(gs.month_kes) }}{% endif %}</div>
+    </div>
+  {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if runs %}<div class="table-wrap"><table class="data"><thead><tr><th>Generator</th><th>Meter</th><th>Hours</th><th>Diesel</th><th>Powered</th><th>By</th><th></th></tr></thead><tbody>
+  {% for r in runs %}<tr><td data-label="Generator"><strong>{{ r.gen_name }}</strong></td><td data-label="Meter">{{ '%g'|format(r.start_hours) }} → {{ '%g'|format(r.stop_hours) }}</td>
+    <td data-label="Hours">{{ '%g'|format((r.stop_hours - r.start_hours)|round(1)) }}</td>
+    <td data-label="Diesel">{{ ('%g'|format(r.diesel_l) ~ ' L') if r.diesel_l else '—' }}{% if r.diesel_cost %}<div class="muted small">KES {{ '{:,.0f}'.format(r.diesel_cost) }}{% if r.from_store %} · store{% endif %}</div>{% endif %}</td>
+    <td data-label="Powered">{{ r.powered or '—' }}{% if r.block_code %} · {{ r.block_code }}{% endif %}</td><td data-label="By">{{ r.worker_name or '—' }}{% if r.notes %}<div class="muted small">{{ r.notes }}</div>{% endif %}</td>
+    <td data-label="">{% if not r.from_store or is_manager %}{{ remove_btn('today.delete_run', 'rid', r.id, r.created_by, r.created_at) }}{% endif %}</td></tr>{% endfor %}
+  </tbody></table></div>{% elif gens %}<p class="muted">No generator runs recorded for this day.</p>{% endif %}
+  {% for e in services %}<p class="small"><span class="pill gray">{{ 'Service' if e.event_type=='service' else 'Repair' }}</span> {{ e.gen_name }} at {{ '%g'|format(e.meter_hours) }} h: {{ e.notes }}{% if e.cost %} (KES {{ '{:,.0f}'.format(e.cost) }}){% endif %}</p>{% endfor %}
+
+  {% if not gens %}
+    <p class="muted">No generator on record yet.</p>
+    {% if is_manager %}
+    <form method="post" action="{{ url_for('today.add_generator') }}" class="form-grid" style="margin-top:.6rem;">
+      <input type="hidden" name="d" value="{{ d }}"><input type="hidden" name="anchor" value="#gen">
+      <div class="field"><label>Generator name *</label><input type="text" name="name" required placeholder="e.g. Generator 10 kVA"></div>
+      <div class="field"><label>Where</label><input type="text" name="location" placeholder="e.g. Borehole house"></div>
+      <div class="field"><label>Service every (hours)</label><input type="number" name="service_hours" value="250" min="10" step="10"></div>
+      <div><button class="btn" type="submit">Add generator</button></div>
+    </form>
+    {% else %}<p class="small muted">Ask the manager to add the generator.</p>{% endif %}
+  {% elif editable %}
+  <details {{ 'open' if not runs }} style="margin-top:.8rem;"><summary class="btn small secondary" style="display:inline-flex;">Add a run</summary>
+  <form method="post" action="{{ url_for('today.add_run') }}" class="form-grid" style="margin-top:.8rem;">
+    <input type="hidden" name="d" value="{{ d }}"><input type="hidden" name="anchor" value="#gen">
+    <div class="field"><label>Generator *</label><select name="asset_id" required id="genSel">{% for gs in gens %}<option value="{{ gs.asset.id }}" data-meter="{{ '%g'|format(gs.meter) if gs.meter is not none else '' }}">{{ gs.asset.name }}</option>{% endfor %}</select></div>
+    <div class="field"><label>Meter at start *</label><input type="number" step="0.1" min="0" name="start_hours" id="genStart" required inputmode="decimal"><small class="muted" id="genHint"></small></div>
+    <div class="field"><label>Meter at stop *</label><input type="number" step="0.1" min="0" name="stop_hours" required inputmode="decimal"></div>
+    <div class="field"><label>Diesel added (litres)</label><input type="number" step="0.1" min="0" name="diesel_l" inputmode="decimal"></div>
+    {% if diesel %}<div class="field"><label style="display:flex;gap:.5rem;align-items:center;font-weight:400;"><input type="checkbox" name="from_store" checked style="width:auto;min-height:0;"> Diesel came from the store ({{ diesel.name }})</label></div>
+    {% else %}<div class="field"><label>Diesel cost (KES)</label><input type="number" step="1" min="0" name="diesel_cost" inputmode="decimal"></div>{% endif %}
+    <div class="field"><label>What it powered</label><select name="powered"><option value="">—</option>{% for x in gen_uses %}<option>{{ x }}</option>{% endfor %}</select></div>
+    <div class="field"><label>Block irrigated</label><select name="block_id"><option value="">—</option>{% for b in blocks %}<option value="{{ b.id }}">{{ b.code }} · {{ b.name }}</option>{% endfor %}</select></div>
+    {{ who_field() }}
+    <div class="field"><label>Notes</label><input type="text" name="notes"></div>
+    <div><button class="btn" type="submit">Save run</button></div>
+  </form></details>
+  <details style="margin-top:.6rem;"><summary class="btn small subtle" style="display:inline-flex;">Record a service or repair</summary>
+  <form method="post" action="{{ url_for('today.add_service') }}" class="form-grid" style="margin-top:.8rem;">
+    <input type="hidden" name="d" value="{{ d }}"><input type="hidden" name="anchor" value="#gen">
+    <div class="field"><label>Generator *</label><select name="asset_id" required>{% for gs in gens %}<option value="{{ gs.asset.id }}">{{ gs.asset.name }}</option>{% endfor %}</select></div>
+    <div class="field"><label>Type *</label><select name="kind">{% for v, t in service_types %}<option value="{{ v }}">{{ t }}</option>{% endfor %}</select></div>
+    <div class="field"><label>Hour meter *</label><input type="number" step="0.1" min="0" name="meter_hours" required inputmode="decimal"></div>
+    <div class="field"><label>What was done *</label><input type="text" name="notes" required placeholder="e.g. oil and oil filter changed"></div>
+    <div class="field"><label>Cost (KES)</label><input type="number" step="1" min="0" name="cost" inputmode="decimal"></div>
+    {{ who_field() }}
+    <div class="field"><label style="display:flex;gap:.5rem;align-items:center;font-weight:400;"><input type="checkbox" name="still_faulty" style="width:auto;min-height:0;"> Still not working properly</label></div>
+    <div><button class="btn secondary" type="submit">Save</button></div>
+  </form></details>
+  {% endif %}
+</div>
+
+<script>
+(function(){
+  var sel=document.getElementById('genSel'),st=document.getElementById('genStart'),hint=document.getElementById('genHint');
+  if(!sel||!st)return;
+  function fill(){var o=sel.options[sel.selectedIndex];var m=o?o.getAttribute('data-meter'):'';
+    if(m){if(!st.value)st.value=m;hint.textContent='Last reading: '+m+' h';}else{hint.textContent='No reading yet: read it off the meter.';}}
+  sel.addEventListener('change',function(){st.value='';fill();});fill();
+})();
+</script>
+{% endblock %}

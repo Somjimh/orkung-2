@@ -38,11 +38,18 @@ STORE_CATEGORIES = [("medicine", "Medicine"), ("vaccine", "Vaccine"), ("chemical
                     ("fuel", "Fuel / oil"), ("supply", "Supply / other")]
 CROP_CATEGORIES = ("chemical", "fertiliser", "seed", "fuel", "supply", "feed")
 
-ASSET_CATEGORIES = ["Pump / borehole", "Solar", "Tank", "Irrigation", "Tool", "Sprayer", "Vehicle / motorbike",
+ASSET_CATEGORIES = ["Generator", "Pump / borehole", "Solar", "Tank", "Irrigation", "Tool", "Sprayer", "Vehicle / motorbike",
                     "Machine", "Building", "Fence", "Furniture / camp", "Electronics", "Other"]
 ASSET_CONDITIONS = [("good", "Good"), ("fair", "Fair"), ("needs_repair", "Needs repair"), ("broken", "Broken")]
 ASSET_STATUS = [("in_use", "In use"), ("in_store", "In store"), ("out", "Checked out"), ("lost", "Lost / missing"),
                 ("disposed", "Disposed")]
+
+# Today log ---------------------------------------------------------------
+FORAGE = ["Napier (chopped)", "Lucerne", "Natural grass / grazing", "Hay", "Maize stover", "Other forage"]
+GEN_USES = ["Borehole pump", "Irrigation", "House / staff quarters", "Sukoon Camp", "Workshop / welding",
+            "Cold room / store", "Other"]
+GEN_SERVICE_TYPES = [("service", "Service (oil, filters)"), ("repair", "Repair / fault")]
+GEN_SERVICE_DEFAULT_HOURS = 250        # hours between services unless the generator says otherwise
 
 ENTERPRISES = ["Chillies", "Bananas", "Livestock", "Sukoon Camp", "Honey", "Fodder & compost", "Farm"]
 

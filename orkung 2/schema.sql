@@ -527,3 +527,48 @@ CREATE TABLE IF NOT EXISTS milestones (
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT
 );
+
+-- =============================================================================
+-- Today: the daily log (added Nov 2026). Jobs use work_logs; spraying uses the
+-- store's stock_movements (move_type 'used' with a block). These two tables hold
+-- what had no home yet: feeding and the generator.
+-- =============================================================================
+
+-- What each herd or group was fed. Forage grown on the farm is recorded by
+-- weight only; feed taken from the store is also taken off the shelf.
+CREATE TABLE IF NOT EXISTS feed_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    feed_date TEXT NOT NULL,
+    group_id INTEGER REFERENCES groups_(id),
+    herd TEXT,                                      -- when no group fits, e.g. "All cattle"
+    feed TEXT NOT NULL,                             -- Napier (chopped) / Lucerne / Dairy meal ...
+    item_id INTEGER REFERENCES stock_items(id),     -- set when it came out of the store
+    kg REAL NOT NULL,
+    cost REAL,                                      -- KES, from the store price when known
+    worker_id INTEGER REFERENCES workers(id),
+    notes TEXT,
+    created_by INTEGER REFERENCES users(id),
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_feed_date ON feed_logs(feed_date);
+
+-- One row each time a generator is run: hour meter, diesel, what it powered.
+-- Services and repairs are asset_events (event_type 'service' / 'repair') with
+-- the hour meter reading in asset_events.meter_hours.
+CREATE TABLE IF NOT EXISTS generator_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_date TEXT NOT NULL,
+    asset_id INTEGER NOT NULL REFERENCES assets(id),
+    start_hours REAL NOT NULL,
+    stop_hours REAL NOT NULL,
+    diesel_l REAL,
+    diesel_cost REAL,                               -- KES
+    from_store INTEGER NOT NULL DEFAULT 0,          -- 1 = diesel taken off the store shelf
+    powered TEXT,                                   -- Borehole pump / Irrigation / House ...
+    block_id INTEGER REFERENCES crop_blocks(id),
+    worker_id INTEGER REFERENCES workers(id),
+    notes TEXT,
+    created_by INTEGER REFERENCES users(id),
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_genruns ON generator_runs(asset_id, run_date);
