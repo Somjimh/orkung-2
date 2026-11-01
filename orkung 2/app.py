@@ -14,6 +14,7 @@ def create_app(config_object=Config):
         db.init_db(app)
         import seed
         seed.run_reference_seed()
+        seed.run_farm_setup()
     os.makedirs(app.config["UPLOAD_DIR"], exist_ok=True)
 
     @app.before_request

@@ -80,3 +80,17 @@ def run_reference_seed():
 
     db.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('weigh_reminder_days','60')")
     db.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('weight_change_warn_pct','30')")
+
+
+def run_farm_setup():
+    """One-off farm additions, each applied once (a settings key records it), so
+    a block renamed or removed afterwards is never put back."""
+    done = db.query("SELECT 1 FROM settings WHERE key='setup_habanero_block'", one=True)
+    if done:
+        return
+    exists = db.query("SELECT 1 FROM crop_blocks WHERE upper(code)='HAB' OR lower(name) LIKE '%habanero%'", one=True)
+    if not exists:
+        # Mohamed, 1 Nov 2026: the habanero area is about half an acre.
+        db.execute("INSERT INTO crop_blocks (code, name, area_acres, notes) VALUES (?,?,?,?)",
+                   ("HAB", "Habanero", 0.5, "About half an acre (added 1 Nov 2026)."))
+    db.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('setup_habanero_block','1')")

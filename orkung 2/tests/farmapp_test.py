@@ -77,6 +77,9 @@ def photo():
 # ---------------------------------------------------------------------------
 for tname in ("routines", "job_tasks", "day_confirmations", "spray_records"):
     check(f"table {tname} created", bool(q("SELECT name FROM sqlite_master WHERE name=?", (tname,))))
+hab = q("SELECT * FROM crop_blocks WHERE code='HAB'")
+check("habanero block (0.5 acre) is set up", hab and hab[0]["area_acres"] == 0.5 and hab[0]["name"] == "Habanero")
+check("habanero is set up only once", q("SELECT value FROM settings WHERE key='setup_habanero_block'")[0]["value"] == "1")
 check("store items can be marked harmful to bees", "bee_harmful" in {r["name"] for r in q("PRAGMA table_info(stock_items)")})
 
 admin = client("admin", "Admin#2026")
@@ -104,6 +107,7 @@ r = c.post("/login", data={"username": "manager", "password": "Manager#2026"})
 check("login goes to the farm app", r.status_code == 302 and r.headers["Location"].endswith("/farm"))
 r = manager.get("/farm")
 check("home shows the area tiles", r.status_code == 200 and "Livestock" in text(r) and "Apiary" in text(r) and "Spraying" in text(r))
+check("home has a Habanero tile", "Habanero" in text(r))
 check("home offers to set the routine jobs", "Set the routine jobs" in text(r))
 prince = client("prince", "Farm#2026")
 r = prince.get("/farm", follow_redirects=True)
