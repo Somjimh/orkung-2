@@ -85,6 +85,7 @@ def run_reference_seed():
 def run_farm_setup():
     """One-off farm additions, each applied once (a settings key records it), so
     a block renamed or removed afterwards is never put back."""
+    _setup_passion_fruit()
     done = db.query("SELECT 1 FROM settings WHERE key='setup_habanero_block'", one=True)
     if done:
         return
@@ -94,3 +95,15 @@ def run_farm_setup():
         db.execute("INSERT INTO crop_blocks (code, name, area_acres, notes) VALUES (?,?,?,?)",
                    ("HAB", "Habanero", 0.5, "About half an acre (added 1 Nov 2026)."))
     db.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('setup_habanero_block','1')")
+
+
+def _setup_passion_fruit():
+    """Passion fruit area, added once (Mohamed, 1 Nov 2026)."""
+    if db.query("SELECT 1 FROM settings WHERE key='setup_passion_block'", one=True):
+        return
+    exists = db.query("SELECT 1 FROM crop_blocks WHERE upper(code)='PF' OR lower(name) LIKE '%passion%'", one=True)
+    if not exists:
+        db.execute("INSERT INTO crop_blocks (code, name, notes) VALUES (?,?,?)",
+                   ("PF", "Passion fruit",
+                    "About 300 seedlings, already trellised and wired (1 Nov 2026). Area not yet measured."))
+    db.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('setup_passion_block','1')")

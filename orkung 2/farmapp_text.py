@@ -14,6 +14,7 @@ AREAS = [
     ("apiary",    "Apiary",         "Nyuki",              "#F2B33D", "#2A1A00"),
     ("bananas",   "Bananas",        "Ndizi",              "#F5D547", "#2B2400"),
     ("chillies",  "Habanero",       "Pilipili",           "#F57C00", "#2A1000"),
+    ("passion",   "Passion fruit",  "Matunda ya shauku",  "#8E244D", "#FFFFFF"),
     ("fodder",    "Fodder",         "Malisho",            "#2F7D32", "#FFFFFF"),
     ("nursery",   "Nurseries",      "Kitalu",             "#B7DD8C", "#1C3305"),
     ("water",     "Water & pipes",  "Maji na mabomba",    "#1565C0", "#FFFFFF"),
