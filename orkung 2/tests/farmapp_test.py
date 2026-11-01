@@ -82,6 +82,19 @@ check("habanero block (0.5 acre) is set up", hab and hab[0]["area_acres"] == 0.5
 pf = q("SELECT * FROM crop_blocks WHERE code='PF'")
 check("passion fruit block set up with its 300 trellised seedlings", pf and pf[0]["name"] == "Passion fruit"
       and "300 seedlings" in pf[0]["notes"])
+ali0 = q("SELECT * FROM workers WHERE name='Ali Juma'")
+check("Ali Juma is on the register from 1 November at 12,000", ali0 and ali0[0]["monthly_salary"] == 12000
+      and ali0[0]["start_date"] == "2026-11-01" and ali0[0]["active"] == 1)
+_c = sqlite3.connect(dbpath)
+_c.execute("INSERT INTO workers (name, pay_type, monthly_salary, start_date) VALUES ('Alfred Kioko','monthly',30000,'2025-01-01')")
+_c.execute("DELETE FROM settings WHERE key='setup_staff_kioko_ali'")
+_c.commit(); _c.close()
+with app.app_context():
+    import seed as _seed
+    _seed.run_farm_setup()
+k = q("SELECT * FROM workers WHERE name='Alfred Kioko'")[0]
+check("Alfred Kioko is marked as left", k["active"] == 0 and k["end_date"] == "2026-10-31")
+check("Ali Juma is not added twice", len(q("SELECT * FROM workers WHERE name='Ali Juma'")) == 1)
 check("habanero is set up only once", q("SELECT value FROM settings WHERE key='setup_habanero_block'")[0]["value"] == "1")
 check("store items can be marked harmful to bees", "bee_harmful" in {r["name"] for r in q("PRAGMA table_info(stock_items)")})
 
@@ -90,7 +103,7 @@ manager = client("manager", "Manager#2026")
 viewer = client("viewer", "Viewer#2026")
 vet = client("vet", "Vet#2026")
 for name, pay in (("Godfrey Ouma", 26000), ("Kajona Malaika", 12000), ("Kapuo", 15000), ("Prince", 14000),
-                  ("Muli", 14000), ("Ali Juma", 12000)):
+                  ("Muli", 14000)):
     manager.post("/work/staff", data={"name": name, "pay_type": "monthly", "monthly_salary": str(pay), "start_date": "2026-08-01"})
 W = {r["name"].split()[0]: r for r in q("SELECT * FROM workers")}
 check("six staff on the register", all(k in W for k in ("Godfrey", "Kajona", "Kapuo", "Prince", "Muli", "Ali")))
@@ -238,6 +251,7 @@ r = viewer.post("/farm/spray", data={"block_id": B["LUC-B"]["id"]})
 check("viewer cannot record a spray", r.status_code == 403)
 r = manager.get("/farm/spray")
 check("spray page lists recent sprays with the safe date", safe in text(r) and "Neem oil" in text(r) and "no gloves/mask" in text(r))
+check("'who sprayed' no longer offers Alfred Kioko", "Alfred Kioko" not in text(r))
 
 # ---------------------------------------------------------------------------
 # 6. Confirm and report

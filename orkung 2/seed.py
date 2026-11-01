@@ -86,6 +86,7 @@ def run_farm_setup():
     """One-off farm additions, each applied once (a settings key records it), so
     a block renamed or removed afterwards is never put back."""
     _setup_passion_fruit()
+    _setup_staff_change_nov_2026()
     done = db.query("SELECT 1 FROM settings WHERE key='setup_habanero_block'", one=True)
     if done:
         return
@@ -107,3 +108,22 @@ def _setup_passion_fruit():
                    ("PF", "Passion fruit",
                     "About 300 seedlings, already trellised and wired (1 Nov 2026). Area not yet measured."))
     db.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('setup_passion_block','1')")
+
+
+def _setup_staff_change_nov_2026():
+    """Mohamed, 1 Nov 2026: Alfred Kioko has left and Ali Juma (12,000 a month,
+    from 1 November) replaces him. Applied once."""
+    if db.query("SELECT 1 FROM settings WHERE key='setup_staff_kioko_ali'", one=True):
+        return
+    for w in db.query("SELECT * FROM workers WHERE active=1 AND lower(name) LIKE '%kioko%'"):
+        db.execute("UPDATE workers SET active=0, end_date=COALESCE(end_date, '2026-10-31'), "
+                   "notes=TRIM(COALESCE(notes,'') || ' Left; replaced by Ali Juma from 1 Nov 2026.') WHERE id=?", (w["id"],))
+        db.execute("UPDATE routines SET active=0 WHERE worker_id=?", (w["id"],))
+        db.audit(None, "update", "worker", w["id"], f"{w['name']} marked as left (replaced by Ali Juma, 1 Nov 2026)")
+    if not db.query("SELECT 1 FROM workers WHERE lower(name) LIKE 'ali juma%' OR lower(name)='ali'", one=True):
+        wid = db.execute("INSERT INTO workers (name, job_title, pay_type, monthly_salary, start_date, notes) "
+                         "VALUES (?,?,?,?,?,?)",
+                         ("Ali Juma", "Farm help (under Muli and Prince)", "monthly", 12000, "2026-11-01",
+                          "Helps Muli and Prince; also enters data in the app. Replaces Alfred Kioko."))
+        db.audit(None, "create", "worker", wid, "Added Ali Juma (12,000 a month from 1 Nov 2026)")
+    db.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('setup_staff_kioko_ali','1')")

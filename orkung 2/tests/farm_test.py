@@ -123,7 +123,7 @@ r = manager.post("/work/staff", data={"name": "No Rate", "pay_type": "daily"}, f
 check("staff without a rate refused", "Enter the name" in r.get_data(as_text=True))
 asha = q("SELECT * FROM workers WHERE name='Asha Monthly'")[0]
 bar = q("SELECT * FROM workers WHERE name='Baraka Casual'")[0]
-check("two staff on the register", len(q("SELECT * FROM workers")) == 2)
+check("both new staff on the register", len(q("SELECT * FROM workers WHERE name IN ('Asha Monthly','Baraka Casual')")) == 2)
 r = viewer.post("/work/staff", data={"name": "Hack", "pay_type": "daily", "daily_rate": "1"})
 check("viewer cannot add staff", r.status_code == 403)
 
