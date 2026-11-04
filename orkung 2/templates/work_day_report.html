@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Day report {{ d }} - Orkung</title>
+<style>
+  :root { --g9:#10331f; --g8:#164a2b; --g1:#e6f2ea; --ink:#1b241d; --mute:#66756a; --line:#cfd8d1; --amber:#b06a06; --red:#b3261e; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #eef2ef; color: var(--ink); font: 13px/1.45 -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
+  .bar { display: flex; gap: .5rem; justify-content: center; padding: .8rem; flex-wrap: wrap; }
+  .bar a, .bar button { font: 600 14px sans-serif; padding: .55rem 1.1rem; border-radius: 8px; border: 1px solid var(--g8); background: #fff; color: var(--g8); cursor: pointer; text-decoration: none; }
+  .bar button { background: var(--g8); color: #fff; }
+  .page { background: #fff; max-width: 210mm; margin: 0 auto 2rem; padding: 14mm 14mm 12mm; box-shadow: 0 2px 12px rgba(0,0,0,.08); }
+  header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 3px solid var(--g8); padding-bottom: .6rem; margin-bottom: .9rem; }
+  header .farm { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--g8); font-weight: 700; }
+  header h1 { margin: .1rem 0 0; font-size: 20px; color: var(--g9); }
+  header .when { text-align: right; font-size: 14px; font-weight: 700; color: var(--g9); }
+  header .when span { display: block; font-size: 11px; font-weight: 400; color: var(--mute); }
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: .9rem; }
+  .kpi { border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
+  .kpi b { display: block; font-size: 17px; color: var(--g9); }
+  .kpi small { color: var(--mute); text-transform: uppercase; font-size: 9.5px; letter-spacing: .04em; font-weight: 700; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--g8); margin: .8rem 0 .3rem; border-bottom: 1px solid var(--line); padding-bottom: 2px; }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; font-size: 10.5px; text-transform: uppercase; color: var(--mute); padding: 4px 6px; border-bottom: 1.5px solid var(--line); background: #f6f9f7; }
+  td { padding: 4px 6px; border-bottom: 1px solid #e7ece8; vertical-align: top; }
+  tr { page-break-inside: avoid; }
+  .job + .job { margin-top: 2px; }
+  .muted { color: var(--mute); }
+  .warn { color: var(--amber); font-weight: 700; }
+  .none { color: var(--mute); font-style: italic; margin: .2rem 0; }
+  ul.flags { margin: 0; padding-left: 1.1rem; }
+  ul.flags li { margin: 2px 0; }
+  .sign { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 1.2rem; page-break-inside: avoid; }
+  .sign > div { border-top: 1px solid var(--ink); padding-top: 4px; font-size: 11px; color: var(--mute); }
+  .sign .space { height: 30px; }
+  footer { margin-top: 1rem; font-size: 10px; color: var(--mute); display: flex; justify-content: space-between; }
+  @page { size: A4; margin: 10mm; }
+  @media print {
+    body { background: #fff; }
+    .bar { display: none; }
+    .page { box-shadow: none; margin: 0; padding: 0; max-width: none; }
+  }
+  @media (max-width: 640px) { .page { padding: 1rem; } .kpis { grid-template-columns: repeat(2, 1fr); } }
+</style>
+</head>
+<body>
+<div class="bar">
+  <a href="{{ url_for('work.day', d=d) }}">&larr; Back to the Daily Sheet</a>
+  <button onclick="window.print()">&#128424; Print / save as PDF</button>
+</div>
+<div class="page">
+  <header>
+    <div><div class="farm">Orkung Organic Farm · Jipe, Taveta</div><h1>Daily Work Report</h1></div>
+    <div class="when">{{ day_name }}<span>Printed {{ printed_at }} by {{ printed_by }}</span></div>
+  </header>
+
+  {% set sm = rec.summary %}
+  <div class="kpis">
+    <div class="kpi"><small>At work</small><b>{{ sm.at_work }} of {{ staff|length }}</b>{% if rec.no_job %}<span class="warn">{{ rec.no_job|length }} with no job</span>{% else %}<span class="muted">{{ sm.jobs }} jobs</span>{% endif %}</div>
+    <div class="kpi"><small>Off / leave / sick / absent</small><b>{{ (counts.get('off',0) + counts.get('leave',0) + counts.get('sick',0) + counts.get('absent',0)) }}</b><span class="muted">{{ staff|length - att|length }} not marked</span></div>
+    <div class="kpi"><small>Feed given</small><b>{{ '%g'|format(sm.feed_kg|round(1)) }} kg</b><span class="muted">{{ sm.sprays }} block{{ '' if sm.sprays==1 else 's' }} sprayed</span></div>
+    <div class="kpi"><small>Generator</small><b>{{ '%g'|format(sm.gen_hours|round(1)) }} h</b><span class="muted">{{ '%g'|format(sm.diesel|round(1)) }} L diesel</span></div>
+  </div>
+
+  <h2>Staff and work done</h2>
+  <table>
+    <thead><tr><th style="width:24%">Person</th><th style="width:13%">Attendance</th><th>Work done (block · output · hours)</th><th style="width:22%">Notes</th></tr></thead>
+    <tbody>
+    {% for w in staff %}{% set a = att.get(w.id) %}{% set js = jobs_by.get(w.id, []) %}
+    <tr>
+      <td><strong>{{ w.name }}</strong>{% if w.job_title %}<div class="muted">{{ w.job_title }}</div>{% endif %}</td>
+      <td>{{ att_label.get(a.status, a.status) if a else '—' }}</td>
+      <td>{% for j in js %}<div class="job">{{ j.activity }}{% if j.block_code %} · {{ j.block_code }}{% endif %}{% if j.quantity is not none %} · {{ '%g'|format(j.quantity) }} {{ j.unit or '' }}{% endif %}{% if j.hours %} · {{ '%g'|format(j.hours) }} h{% endif %}{% if j.notes and j.source != 'sheet' %} <span class="muted">({{ j.notes }})</span>{% endif %}</div>
+        {% else %}{% if a and a.status in ('present','half') %}<span class="warn">At work — no job recorded</span>{% else %}<span class="muted">—</span>{% endif %}{% endfor %}</td>
+      <td>{{ (a.notes if a and a.notes) or '' }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+
+  {% if outputs %}
+  <h2>Output for the day</h2>
+  <table><thead><tr><th>Job</th><th>Total</th></tr></thead><tbody>
+  {% for o in outputs %}<tr><td>{{ o.activity }}</td><td>{{ '%g'|format(o.qty) }} {{ o.unit }}</td></tr>{% endfor %}
+  </tbody></table>
+  {% endif %}
+
+  <h2>Feeding</h2>
+  {% if rec.feeds %}<table><thead><tr><th>Herd / group</th><th>Feed</th><th>Kg</th><th>By</th></tr></thead><tbody>
+  {% for f in rec.feeds %}<tr><td>{{ f.group_name or f.herd or '—' }}</td><td>{{ f.feed }}</td><td>{{ '%g'|format(f.kg) }}</td><td>{{ f.worker_name or f.by_name or '' }}</td></tr>{% endfor %}
+  </tbody></table>{% else %}<p class="none">No feeding recorded.</p>{% endif %}
+
+  <h2>Spraying</h2>
+  {% if rec.sprays %}<table><thead><tr><th>Block</th><th>Product</th><th>Amount</th><th>By</th><th>No harvest before</th></tr></thead><tbody>
+  {% for x in rec.sprays %}<tr><td>{{ x.block_code }}</td><td>{{ x.item }}</td><td>{{ '%g'|format(x.qty) }} {{ x.unit }}</td><td>{{ x.worker_name or x.by_name or '' }}</td><td>{{ x.safe or '—' }}</td></tr>{% endfor %}
+  </tbody></table>{% else %}<p class="none">No spraying recorded.</p>{% endif %}
+
+  <h2>Generator</h2>
+  {% if rec.runs %}<table><thead><tr><th>Generator</th><th>Hour meter</th><th>Hours</th><th>Diesel</th><th>Used for</th></tr></thead><tbody>
+  {% for r in rec.runs %}<tr><td>{{ r.gen_name }}</td><td>{{ '%g'|format(r.start_hours) }} → {{ '%g'|format(r.stop_hours) }}</td><td>{{ '%g'|format(r.stop_hours - r.start_hours) }}</td><td>{{ ('%g'|format(r.diesel_l) ~ ' L') if r.diesel_l else '—' }}</td><td>{{ r.powered or '' }}{% if r.block_code %} · {{ r.block_code }}{% endif %}</td></tr>{% endfor %}
+  </tbody></table>{% else %}<p class="none">No generator running recorded.</p>{% endif %}
+
+  {% if rec.flags %}
+  <h2>Points to follow up</h2>
+  <ul class="flags">{% for level, text in rec.flags %}<li>{{ text }}</li>{% endfor %}</ul>
+  {% endif %}
+
+  <div class="sign">
+    <div><div class="space"></div>Farm Manager — name, signature, date</div>
+    <div><div class="space"></div>Checked by (Director) — name, signature, date</div>
+  </div>
+  <footer><span>Orkung Farm Manager · Daily Work Report {{ d }}</span><span>Figures as recorded in the farm app at time of printing</span></footer>
+</div>
+</body>
+</html>

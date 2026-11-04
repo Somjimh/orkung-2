@@ -300,6 +300,22 @@ check("Today entries show in the work log", "Weeding" in text(manager.get(f"/wor
 check("audit trail written", q("SELECT COUNT(*) c FROM audit_log WHERE summary LIKE 'Today log:%'")[0]["c"] >= 2)
 check("foreign keys intact", not q("PRAGMA foreign_key_check"))
 
+# ---------------------------------------------------------------------------
+# Daily Sheet shows the whole day; printable day report
+# ---------------------------------------------------------------------------
+page = text(manager.get(f"/work/day?d={TODAY}"))
+check("daily sheet shows feeding from the Today page", "Lucerne" in page)
+check("daily sheet shows generator runs", "Borehole pump" in page)
+check("daily sheet lists Today-page jobs in the person's row", "+ Weeding" in page or "+ Pruning" in page)
+check("daily sheet links to the printable report", "/work/day/report?d=" + TODAY in page)
+rr = manager.get(f"/work/day/report?d={TODAY}")
+rep = text(rr)
+check("day report opens", rr.status_code == 200, rr.status_code)
+check("day report has staff, jobs, feeding, generator and sign-off",
+      all(x in rep for x in ("Daily Work Report", "Weeding", "Lucerne", "Borehole pump", "Farm Manager")))
+check("day report for an empty day still opens", manager.get("/work/day/report?d=2020-01-01").status_code == 200)
+check("field worker login cannot open day report", kapuo_c.get(f"/work/day/report?d={TODAY}").status_code in (302, 403))
+
 print()
 if FAILS:
     print(f"{len(FAILS)} CHECK(S) FAILED:")

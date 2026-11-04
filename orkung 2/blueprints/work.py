@@ -81,12 +81,72 @@ def day():
     extra = db.query("SELECT l.*, w.name, b.code AS block_code FROM work_logs l JOIN workers w ON w.id=l.worker_id "
                      "LEFT JOIN crop_blocks b ON b.id=l.block_id WHERE l.work_date=? AND l.source!='sheet' ORDER BY w.name", (d,))
     dd = date.fromisoformat(d)
-    return render_template("work_day.html", d=d, day_name=dd.strftime("%A %d %B %Y"),
+    rec = _day_records(d)
+    return render_template("work_day.html", d=d, rec=rec, jobs_by=_jobs_by_worker(rec["jobs"]),
+                           outputs=_output_totals(rec["jobs"]), day_name=dd.strftime("%A %d %B %Y"),
                            prev=(dd - timedelta(days=1)).isoformat(), next=(dd + timedelta(days=1)).isoformat(),
                            is_today=d == date.today().isoformat(), future=d > date.today().isoformat(),
                            staff=staff, att=att, sheet=sheet, extra=extra, locked=locked,
                            blocks=farm.blocks(), activities=farm.ACTIVITIES, units=farm.OUTPUT_UNITS,
                            statuses=farm.ATTENDANCE, can_edit=g.user["role"] in auth.CROP_EDIT)
+
+
+# ---------------------------------------------------------------------------
+# The whole day in one place, and the printed day report
+# ---------------------------------------------------------------------------
+
+def _day_records(d):
+    from blueprints.today import day_records
+    return day_records(d)
+
+
+def _jobs_by_worker(jobs):
+    out = {}
+    for j in jobs:
+        out.setdefault(j["worker_id"], []).append(j)
+    return out
+
+
+def _output_totals(jobs):
+    """Output added up by job and unit, e.g. Harvesting / picking: 120 kg."""
+    tot = {}
+    for j in jobs:
+        if j["quantity"] is None:
+            continue
+        k = (j["activity"], j["unit"] or "")
+        tot[k] = tot.get(k, 0) + j["quantity"]
+    return [dict(activity=a, unit=u, qty=q) for (a, u), q in sorted(tot.items())]
+
+
+@bp.route("/day/report")
+@auth.login_required
+@auth.require_roles(*auth.PAY_VIEW)
+def day_report():
+    d = _day()
+    rec = _day_records(d)
+    staff = list(farm.workers())
+    ids = {w["id"] for w in staff}
+    for w in db.query("SELECT w.* FROM workers w JOIN attendance a ON a.worker_id=w.id WHERE a.work_date=? AND w.active=0", (d,)):
+        if w["id"] not in ids:
+            staff.append(w)
+    att = {r["worker_id"]: r for r in db.query("SELECT * FROM attendance WHERE work_date=?", (d,))}
+    counts = {}
+    for a in att.values():
+        counts[a["status"]] = counts.get(a["status"], 0) + 1
+    dd = date.fromisoformat(d)
+    return render_template("work_day_report.html", d=d, day_name=dd.strftime("%A %d %B %Y"), rec=rec, staff=staff,
+                           att=att, counts=counts, jobs_by=_jobs_by_worker(rec["jobs"]),
+                           outputs=_output_totals(rec["jobs"]), att_label=farm.ATT_LABEL,
+                           printed_by=g.user["full_name"], printed_at=_now_nairobi())
+
+
+def _now_nairobi():
+    from datetime import datetime
+    try:
+        from zoneinfo import ZoneInfo
+        return datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%d %b %Y %H:%M")
+    except Exception:
+        return datetime.now().strftime("%d %b %Y %H:%M")
 
 
 @bp.route("/log/add", methods=["POST"])
