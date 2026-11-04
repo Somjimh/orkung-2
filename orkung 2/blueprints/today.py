@@ -146,15 +146,10 @@ def _base_for(item, amount, unit):
 # The page
 # ---------------------------------------------------------------------------
 
-@bp.route("")
-@auth.login_required
-@auth.require_roles(*auth.DAILY_VIEW)
-def index():
-    d = _day()
-    dd = date.fromisoformat(d)
-    me = _linked_worker()
-    self_only = _self_only()
-
+def day_records(d):
+    """Everything recorded for one day: jobs, feeding, spraying, generator,
+    who was at work, a summary and the things to look at. Shared by the
+    Today page, the Daily Sheet and the printable day report."""
     jobs = db.query("SELECT l.*, w.name, b.code AS block_code, u.full_name AS by_name FROM work_logs l "
                     "JOIN workers w ON w.id=l.worker_id LEFT JOIN crop_blocks b ON b.id=l.block_id "
                     "LEFT JOIN users u ON u.id=l.created_by WHERE l.work_date=? ORDER BY w.name, l.id", (d,))
@@ -221,6 +216,23 @@ def index():
     summary = dict(at_work=len(present), jobs=len(jobs), feed_kg=sum(f["kg"] for f in feeds),
                    feed_cost=sum((f["cost"] or 0) for f in feeds), sprays=len(spray_rows),
                    gen_hours=gen_hours, diesel=diesel)
+
+    return dict(jobs=jobs, feeds=feeds, sprays=spray_rows, runs=runs, services=services, gens=gens,
+                present=present, no_job=no_job, flags=flags, summary=summary)
+
+
+@bp.route("")
+@auth.login_required
+@auth.require_roles(*auth.DAILY_VIEW)
+def index():
+    d = _day()
+    dd = date.fromisoformat(d)
+    me = _linked_worker()
+    self_only = _self_only()
+
+    r = day_records(d)
+    jobs, feeds, spray_rows, runs, services, gens = r["jobs"], r["feeds"], r["sprays"], r["runs"], r["services"], r["gens"]
+    summary, flags = r["summary"], r["flags"]
 
     stock_feeds = db.query("SELECT * FROM stock_items WHERE active=1 AND category='feed' ORDER BY name")
     spray_items = db.query("SELECT * FROM stock_items WHERE active=1 AND category IN ('chemical','fertiliser') ORDER BY name")

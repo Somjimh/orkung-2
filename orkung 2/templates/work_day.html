@@ -10,7 +10,10 @@
     <strong style="font-size:1.05rem;color:var(--green-900);">{{ day_name }}{% if is_today %} <span class="pill green">today</span>{% endif %}</strong>
     {% if not is_today %}<a class="btn small secondary" href="{{ url_for('work.day', d=next) }}">Next day &rarr;</a>{% endif %}
   </div>
-  <form method="get" class="btn-row"><input type="date" name="d" value="{{ d }}" style="width:170px;min-height:36px;padding:.3rem .5rem;"><button class="btn small subtle" type="submit">Go</button></form>
+  <div class="btn-row">
+    <form method="get" class="btn-row"><input type="date" name="d" value="{{ d }}" style="width:170px;min-height:36px;padding:.3rem .5rem;"><button class="btn small subtle" type="submit">Go</button></form>
+    <a class="btn small" href="{{ url_for('work.day_report', d=d) }}" target="_blank">&#128424; Print day report</a>
+  </div>
 </div>
 {% if locked %}<div class="flash info">The pay run for {{ d[:7] }} is approved, so this day is frozen. It is shown for reference.</div>{% endif %}
 
@@ -18,6 +21,13 @@
 <div class="card section"><p class="muted">No staff on the register yet. {% if 'payroll' in nav %}<a href="{{ url_for('work.workers') }}">Add your staff first</a>.{% endif %}</p></div>
 {% else %}
 {% set editable = can_edit and not locked and not future %}
+{% set sm = rec.summary %}
+<div class="grid cols-4 section">
+  <div class="stat-card"><div class="stat-label">At work</div><div class="stat-value">{{ sm.at_work }} <span style="font-size:1rem;color:var(--ink-500);">of {{ staff|length }}</span></div><div class="stat-sub">{{ sm.jobs }} job{{ '' if sm.jobs==1 else 's' }} recorded{% if rec.no_job %} · <span style="color:var(--amber-600);font-weight:700;">{{ rec.no_job|length }} with no job</span>{% endif %}</div></div>
+  <div class="stat-card"><div class="stat-label">Output</div><div class="stat-value" style="font-size:1.15rem;">{% if outputs %}{% for o in outputs[:3] %}{{ '%g'|format(o.qty) }} {{ o.unit }}{{ ', ' if not loop.last }}{% endfor %}{% else %}—{% endif %}</div><div class="stat-sub">{% if outputs %}{{ outputs|map(attribute='activity')|unique|join(', ') }}{% else %}nothing measured yet{% endif %}</div></div>
+  <div class="stat-card"><div class="stat-label">Feeding &amp; spraying</div><div class="stat-value" style="font-size:1.15rem;">{{ '%g'|format(sm.feed_kg|round(1)) }} kg feed</div><div class="stat-sub">{{ sm.sprays }} block{{ '' if sm.sprays==1 else 's' }} sprayed</div></div>
+  <div class="stat-card"><div class="stat-label">Generator</div><div class="stat-value" style="font-size:1.15rem;">{{ '%g'|format(sm.gen_hours|round(1)) }} h</div><div class="stat-sub">{{ '%g'|format(sm.diesel|round(1)) }} L diesel</div></div>
+</div>
 <form method="post" class="card section" id="sheet"{% if editable %} data-draft-key="daily-sheet-{{ d }}"{% endif %}>
   <input type="hidden" name="d" value="{{ d }}">
   <p class="small muted">One line per person: mark attendance, then the main job, where and how much. A person marked present with no job shows as paid time with no work. Leave attendance blank for anyone who is not due that day.</p>
@@ -33,7 +43,8 @@
         {% for v, t in statuses %}<option value="{{ v }}" {{ 'selected' if a and a.status==v }}>{{ t }}</option>{% endfor %}</select></td>
       <td data-label="Main job"><select name="a_{{ w.id }}" {{ 'disabled' if not editable }}><option value="">—</option>
         {% for x in activities %}<option {{ 'selected' if s and s.activity==x }}>{{ x }}</option>{% endfor %}
-        {% if s and s.activity not in activities %}<option selected>{{ s.activity }}</option>{% endif %}</select></td>
+        {% if s and s.activity not in activities %}<option selected>{{ s.activity }}</option>{% endif %}</select>
+        {% for j in jobs_by.get(w.id, []) if j.source != 'sheet' %}<div class="small" style="margin-top:.3rem;color:var(--green-800);">+ {{ j.activity }}{% if j.block_code %} · {{ j.block_code }}{% endif %}{% if j.quantity is not none %} · {{ '%g'|format(j.quantity) }} {{ j.unit or '' }}{% endif %}{% if j.hours %} · {{ '%g'|format(j.hours) }} h{% endif %}</div>{% endfor %}</td>
       <td data-label="Block"><select name="b_{{ w.id }}" style="min-width:110px;" {{ 'disabled' if not editable }}><option value="">—</option>
         {% for b in blocks %}<option value="{{ b.id }}" {{ 'selected' if s and s.block_id==b.id }}>{{ b.code }}</option>{% endfor %}</select></td>
       <td data-label="Output"><div class="btn-row" style="flex-wrap:nowrap;"><input type="number" step="0.1" name="q_{{ w.id }}" value="{{ '%g'|format(s.quantity) if s and s.quantity is not none else '' }}" style="width:80px;" {{ 'disabled' if not editable }}>
@@ -47,7 +58,7 @@
 </form>
 
 <div class="card section">
-  <h3>Other jobs done the same day</h3>
+  <h3>Extra jobs (someone did more than one job)</h3>
   <p class="small muted">When someone did more than one job, add the extra ones here. The day's cost is split across the jobs by hours (equally if no hours).</p>
   {% if extra %}<div class="table-wrap"><table class="data"><thead><tr><th>Person</th><th>Job</th><th>Block</th><th>Output</th><th>Hours</th><th>Notes</th>{% if editable %}<th></th>{% endif %}</tr></thead><tbody>
   {% for l in extra %}<tr><td data-label="Person">{{ l.name }}</td><td data-label="Job">{{ l.activity }}</td><td data-label="Block">{{ l.block_code or '—' }}</td>
@@ -67,5 +78,31 @@
   </form>
   {% endif %}
 </div>
+
+<div class="card section">
+  <div class="btn-row" style="justify-content:space-between;"><h3 style="margin:0;">Rest of the day: feeding, spraying, generator</h3>
+    {% if 'today' in nav %}<a class="btn small secondary" href="{{ url_for('today.index', d=d) }}">Record these on the Today page &rarr;</a>{% endif %}</div>
+  <h4 style="margin:1rem 0 .4rem;">Feeding</h4>
+  {% if rec.feeds %}<div class="table-wrap"><table class="data"><thead><tr><th>Herd / group</th><th>Feed</th><th>Kg</th><th>By</th></tr></thead><tbody>
+  {% for f in rec.feeds %}<tr><td data-label="Herd / group">{{ f.group_name or f.herd or '—' }}</td><td data-label="Feed">{{ f.feed }}</td><td data-label="Kg">{{ '%g'|format(f.kg) }}</td><td data-label="By">{{ f.worker_name or f.by_name or '' }}</td></tr>{% endfor %}
+  </tbody></table></div>{% else %}<p class="small muted">No feeding recorded.</p>{% endif %}
+  <h4 style="margin:1rem 0 .4rem;">Spraying</h4>
+  {% if rec.sprays %}<div class="table-wrap"><table class="data"><thead><tr><th>Block</th><th>Product</th><th>Amount</th><th>By</th><th>No harvest before</th></tr></thead><tbody>
+  {% for x in rec.sprays %}<tr><td data-label="Block">{{ x.block_code }}</td><td data-label="Product">{{ x.item }}</td><td data-label="Amount">{{ '%g'|format(x.qty) }} {{ x.unit }}</td><td data-label="By">{{ x.worker_name or x.by_name or '' }}</td><td data-label="No harvest before">{{ x.safe or '—' }}</td></tr>{% endfor %}
+  </tbody></table></div>{% else %}<p class="small muted">No spraying recorded.</p>{% endif %}
+  <h4 style="margin:1rem 0 .4rem;">Generator</h4>
+  {% if rec.runs %}<div class="table-wrap"><table class="data"><thead><tr><th>Generator</th><th>Hour meter</th><th>Hours</th><th>Diesel</th><th>Used for</th></tr></thead><tbody>
+  {% for r in rec.runs %}<tr><td data-label="Generator">{{ r.gen_name }}</td><td data-label="Hour meter">{{ '%g'|format(r.start_hours) }} → {{ '%g'|format(r.stop_hours) }}</td><td data-label="Hours">{{ '%g'|format(r.stop_hours - r.start_hours) }}</td><td data-label="Diesel">{{ ('%g'|format(r.diesel_l) ~ ' L') if r.diesel_l else '—' }}</td><td data-label="Used for">{{ r.powered or '' }}{% if r.block_code %} · {{ r.block_code }}{% endif %}</td></tr>{% endfor %}
+  </tbody></table></div>{% else %}<p class="small muted">No generator running recorded.</p>{% endif %}
+</div>
+
+{% if rec.flags %}
+<div class="card section">
+  <h3>To look at</h3>
+  <ul style="margin:.4rem 0 0;padding-left:0;list-style:none;display:flex;flex-direction:column;gap:.45rem;">
+    {% for level, text in rec.flags %}<li style="display:flex;gap:.5rem;align-items:flex-start;"><span class="pill {{ level }}" style="flex:none;">{{ 'Act' if level=='red' else 'Check' if level=='amber' else 'Note' }}</span><span>{{ text }}</span></li>{% endfor %}
+  </ul>
+</div>
+{% endif %}
 {% endif %}
 {% endblock %}
