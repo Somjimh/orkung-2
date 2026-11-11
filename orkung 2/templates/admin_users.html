@@ -11,6 +11,11 @@
   <a href="{{ url_for('reports.audit_report') }}">Audit history</a>
 </div>
 
+<div class="card section" style="display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;">
+  <div><h3 style="margin:0;">Logins for all staff</h3><p class="small muted" style="margin:.2rem 0 0;">Give every staff member their own login on their phone, linked to their name, with printable cards.</p></div>
+  <a class="btn" href="{{ url_for('admin.staff_logins') }}">Create staff logins &rarr;</a>
+</div>
+
 <div class="card section">
   <h3>Add a user</h3>
   <form method="post" action="{{ url_for('admin.add_user') }}" class="form-grid">

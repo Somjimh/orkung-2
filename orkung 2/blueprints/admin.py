@@ -51,6 +51,77 @@ def link_staff(user_id):
     return redirect(url_for("admin.users"))
 
 
+# ---------------------------------------------------------------------------
+# Logins for all staff in one go, with printable cards
+# ---------------------------------------------------------------------------
+
+_PW_WORDS = ["shamba", "jipe", "ngombe", "mbuzi", "kondoo", "nyuki", "ndizi", "pilipili", "maji", "jua"]
+
+
+def _suggest_username(name, taken):
+    import re
+    base = re.sub(r"[^a-z]", "", (name or "").split()[0].lower()) or "staff"
+    u, n = base, 2
+    while u in taken:
+        u, n = f"{base}{n}", n + 1
+    taken.add(u)
+    return u
+
+
+def _new_password():
+    import secrets
+    return secrets.choice(_PW_WORDS) + str(secrets.randbelow(9000) + 1000)
+
+
+@bp.route("/users/staff-logins", methods=["GET", "POST"])
+@auth.login_required
+@auth.require_roles("admin")
+def staff_logins():
+    """Create a login for every staff member who has none, linked to their staff
+    record, and print a card for each with the username and a first password."""
+    linked = {r["worker_id"]: r for r in db.query("SELECT * FROM users WHERE worker_id IS NOT NULL")}
+    staff = db.query("SELECT * FROM workers WHERE active=1 ORDER BY name")
+    taken = {r["username"].lower() for r in db.query("SELECT username FROM users")}
+    todo = []
+    for w in staff:
+        if w["id"] in linked:
+            continue
+        role = "manager" if "manager" in (w["job_title"] or "").lower() else "worker"
+        todo.append(dict(w=w, username=_suggest_username(w["name"], taken), role=role))
+    farmphone_exists = "farmphone" in taken
+
+    if request.method == "GET":
+        return render_template("admin_staff_logins.html", todo=todo, done=[(w, linked[w["id"]]) for w in staff if w["id"] in linked],
+                               farmphone_exists=farmphone_exists)
+
+    cards = []
+    for t in todo:
+        wid = t["w"]["id"]
+        if not request.form.get(f"make_{wid}"):
+            continue
+        username = (request.form.get(f"username_{wid}") or t["username"]).strip().lower()
+        role = request.form.get(f"role_{wid}") if request.form.get(f"role_{wid}") in ("worker", "manager", "storekeeper") else "worker"
+        if db.query("SELECT 1 FROM users WHERE lower(username)=?", (username,), one=True):
+            flash(f"Username '{username}' is already taken; {t['w']['name']} was skipped.", "error")
+            continue
+        pw = _new_password()
+        uid = db.execute("INSERT INTO users (username, password_hash, full_name, role, worker_id) VALUES (?,?,?,?,?)",
+                         (username, generate_password_hash(pw), t["w"]["name"], role, wid))
+        db.audit(g.user, "create", "user", uid, f"Created staff login {username} ({role}) linked to {t['w']['name']}")
+        cards.append(dict(name=t["w"]["name"], title=t["w"]["job_title"], username=username, password=pw, role=role))
+    if request.form.get("make_farmphone") and not farmphone_exists:
+        pw = _new_password()
+        uid = db.execute("INSERT INTO users (username, password_hash, full_name, role) VALUES (?,?,?,?)",
+                         ("farmphone", generate_password_hash(pw), "Shared farm phone", "worker"))
+        db.audit(g.user, "create", "user", uid, "Created shared farm phone login")
+        cards.append(dict(name="Shared farm phone", title="For anyone without a smartphone", username="farmphone",
+                          password=pw, role="worker"))
+    if not cards:
+        flash("No logins were created.", "error")
+        return redirect(url_for("admin.staff_logins"))
+    return render_template("staff_login_cards.html", cards=cards, site=request.host_url.rstrip("/"))
+
+
 @bp.route("/users/add", methods=["POST"])
 @auth.login_required
 @auth.require_roles("admin")

@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Staff login cards - Orkung</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #eef2ef; color: #1b241d; font: 14px/1.45 -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
+  .bar { display: flex; gap: .5rem; justify-content: center; align-items: center; padding: .8rem; flex-wrap: wrap; text-align: center; }
+  .bar a, .bar button { font: 600 14px sans-serif; padding: .55rem 1.1rem; border-radius: 8px; border: 1px solid #164a2b; background: #fff; color: #164a2b; cursor: pointer; text-decoration: none; }
+  .bar button { background: #164a2b; color: #fff; }
+  .warn { width: 100%; color: #8a4b00; font-weight: 600; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; max-width: 210mm; margin: 0 auto 2rem; padding: 0 12px; }
+  .card { background: #fff; border: 2px dashed #9bb3a3; border-radius: 10px; padding: 14px 16px; page-break-inside: avoid; }
+  .card .top { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 2px solid #164a2b; padding-bottom: 6px; margin-bottom: 8px; }
+  .card .farm { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #164a2b; font-weight: 700; }
+  .card h2 { margin: 0; font-size: 18px; color: #10331f; }
+  .card .job { color: #66756a; font-size: 12px; }
+  .creds { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin: 6px 0 10px; }
+  .creds b { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 17px; letter-spacing: .03em; }
+  .site { font-family: ui-monospace, Menlo, Consolas, monospace; font-weight: 700; }
+  ol { margin: 0; padding-left: 1.2rem; font-size: 12.5px; }
+  ol li { margin: 2px 0; }
+  .sw { color: #2d5f3f; font-style: italic; }
+  @page { size: A4; margin: 10mm; }
+  @media print { body { background: #fff; } .bar { display: none; } .cards { padding: 0; } }
+</style>
+</head>
+<body>
+<div class="bar">
+  <span class="warn">These passwords are shown only once. Print this page (or save it as PDF) before you leave it.</span>
+  <a href="{{ url_for('admin.users') }}">&larr; Back to Users</a>
+  <button onclick="window.print()">&#128424; Print cards</button>
+</div>
+<div class="cards">
+{% for c in cards %}
+  <div class="card">
+    <div class="top"><span class="farm">Orkung Farm App</span><span class="job">{{ c.title or '' }}</span></div>
+    <h2>{{ c.name }}</h2>
+    <div class="creds">
+      <span>Website / Tovuti</span><span class="site">{{ site }}</span>
+      <span>Username / Jina</span><b>{{ c.username }}</b>
+      <span>Password / Nenosiri</span><b>{{ c.password }}</b>
+    </div>
+    <ol>
+      <li>Open the website on your phone. <span class="sw">Fungua tovuti kwenye simu yako.</span></li>
+      <li>Type your username and password. <span class="sw">Andika jina na nenosiri lako.</span></li>
+      <li>Add to Home Screen so it opens like an app. <span class="sw">Weka kwenye skrini ya mwanzo.</span></li>
+      <li>Open <strong>My jobs today</strong> every morning and tick each job when done. <span class="sw">Fungua "Kazi zangu leo" kila asubuhi na weka alama kila kazi ikikamilika.</span></li>
+    </ol>
+  </div>
+{% endfor %}
+</div>
+</body>
+</html>
