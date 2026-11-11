@@ -99,13 +99,29 @@ NAV_SECTIONS = {
                 "health", "groups", "movements", "tasks", "reports", "admin", "payroll"} | FARM,
     "manager": {"dashboard", "animals", "add_animal", "weights", "breeding", "births",
                 "health", "groups", "movements", "tasks", "reports", "payroll"} | FARM,
-    "worker":  {"dashboard", "animals", "add_animal", "weights", "breeding", "births",
-                "health", "groups", "movements", "tasks", "reports", "today", "crops", "store"},
+    # Workers use the farm app on their phones; besides it they see only the
+    # livestock records, never money (pay, costs, prices, sales, store value).
+    "worker":  {"animals", "add_animal", "weights", "breeding", "births",
+                "health", "groups", "movements", "tasks", "today"},
     "viewer":  {"dashboard", "animals", "weights", "breeding", "births",
                 "health", "groups", "movements", "tasks", "reports", "payroll"} | FARM,
     "vet":     {"dashboard", "animals", "health", "tasks", "reports", "store"},
     "storekeeper": {"dashboard", "today", "crops", "store", "assets", "milestones", "tasks", "reports"},
 }
+
+
+# Parts of the site a worker login may open. Everything else (dashboard, crops,
+# costs, store prices, Daily Sheet, payroll, reports, admin) sends them back to
+# their own jobs.
+WORKER_BLUEPRINTS = {"farmapp", "auth", "today", "animals", "breeding", "groups", "health", "weights", "tasks"}
+WORKER_ENDPOINTS = {"static", "manifest", "service_worker", "uploaded_file",
+                    "crops.harvests", "crops.delete_harvest"}
+
+
+def worker_may_open(endpoint, blueprint):
+    if endpoint is None:
+        return True
+    return blueprint in WORKER_BLUEPRINTS or endpoint in WORKER_ENDPOINTS
 
 
 def visible_sections(role):

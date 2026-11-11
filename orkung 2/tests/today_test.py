@@ -336,6 +336,11 @@ if m:
 pg = text(admin.get("/admin/users/staff-logins"))
 check("created login now shows as already set up", "ali" in pg and 'name="make_%d"' % ali["id"] not in pg)
 
+r = admin.post(f"/admin/users/{q("SELECT id FROM users WHERE username='ali'")[0]["id"]}/role", data={"role": "storekeeper"})
+check("admin can change a user's role", q("SELECT role FROM users WHERE username='ali'")[0]["role"] == "storekeeper")
+r = manager.post(f"/admin/users/{q("SELECT id FROM users WHERE username='ali'")[0]["id"]}/role", data={"role": "admin"})
+check("manager cannot change roles", q("SELECT role FROM users WHERE username='ali'")[0]["role"] == "storekeeper")
+
 print()
 if FAILS:
     print(f"{len(FAILS)} CHECK(S) FAILED:")

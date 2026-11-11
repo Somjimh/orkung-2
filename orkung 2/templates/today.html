@@ -2,6 +2,7 @@
 {% block title %}Today {{ d }} - {{ app_name }}{% endblock %}
 {% block heading %}Today on the farm{% endblock %}
 {% block content %}
+{% set money = current_user.role != 'worker' %}
 {% macro who_field() %}
   {% if self_only %}
     <div class="field"><label>Who</label><div class="pill green" style="align-self:flex-start;">{{ me.name }}</div></div>
@@ -32,7 +33,7 @@
 
 <div class="grid cols-4 section">
   <div class="stat-card"><div class="stat-label">At work</div><div class="stat-value">{{ summary.at_work }}</div><div class="stat-sub">{{ summary.jobs }} job{{ '' if summary.jobs==1 else 's' }} recorded</div></div>
-  <div class="stat-card"><div class="stat-label">Feed given</div><div class="stat-value">{{ '%g'|format(summary.feed_kg|round(1)) }} kg</div><div class="stat-sub">{% if summary.feed_cost %}KES {{ '{:,.0f}'.format(summary.feed_cost) }} from the store{% else %}{{ feeds|length }} entr{{ 'y' if feeds|length==1 else 'ies' }}{% endif %}</div></div>
+  <div class="stat-card"><div class="stat-label">Feed given</div><div class="stat-value">{{ '%g'|format(summary.feed_kg|round(1)) }} kg</div><div class="stat-sub">{% if summary.feed_cost and money %}KES {{ '{:,.0f}'.format(summary.feed_cost) }} from the store{% else %}{{ feeds|length }} entr{{ 'y' if feeds|length==1 else 'ies' }}{% endif %}</div></div>
   <div class="stat-card"><div class="stat-label">Sprays</div><div class="stat-value">{{ summary.sprays }}</div><div class="stat-sub">blocks sprayed</div></div>
   <div class="stat-card"><div class="stat-label">Generator</div><div class="stat-value">{{ '%g'|format(summary.gen_hours|round(1)) }} h</div><div class="stat-sub">{{ '%g'|format(summary.diesel|round(1)) }} L diesel</div></div>
 </div>
@@ -78,9 +79,9 @@
 {# ------------------------------------------------------------------ Feeding #}
 <div class="card section" id="feed">
   <h3>Feeding</h3>
-  {% if feeds %}<div class="table-wrap"><table class="data"><thead><tr><th>Group</th><th>Feed</th><th>Kg</th><th>Cost</th><th>By</th><th>Notes</th><th></th></tr></thead><tbody>
+  {% if feeds %}<div class="table-wrap"><table class="data"><thead><tr><th>Group</th><th>Feed</th><th>Kg</th>{% if money %}<th>Cost</th>{% endif %}<th>By</th><th>Notes</th><th></th></tr></thead><tbody>
   {% for f in feeds %}<tr><td data-label="Group"><strong>{{ f.group_name or f.herd }}</strong></td><td data-label="Feed">{{ f.feed }}{% if f.item_id %} <span class="pill gray">from store</span>{% endif %}</td>
-    <td data-label="Kg">{{ '%g'|format(f.kg) }}</td><td data-label="Cost">{{ ('KES ' ~ '{:,.0f}'.format(f.cost)) if f.cost else '—' }}</td>
+    <td data-label="Kg">{{ '%g'|format(f.kg) }}</td>{% if money %}<td data-label="Cost">{{ ('KES ' ~ '{:,.0f}'.format(f.cost)) if f.cost else '—' }}</td>{% endif %}
     <td data-label="By">{{ f.worker_name or '—' }}</td><td data-label="Notes">{{ f.notes or '' }}</td>
     <td data-label="">{% if not f.item_id %}{{ remove_btn('today.delete_feed', 'fid', f.id, f.created_by, f.created_at) }}{% endif %}</td></tr>{% endfor %}
   </tbody></table></div>{% else %}<p class="muted">No feeding recorded yet for this day.</p>{% endif %}
@@ -147,7 +148,7 @@
         {% elif gs.state=='ok' %}<span class="pill green">OK</span> next service at {{ '%g'|format(gs.due_at) }} h
         {% else %}<span class="pill gray">No service on record</span>{% endif %}
       </div>
-      <div class="stat-sub">This month: {{ '%g'|format(gs.month_hours|round(1)) }} h · {{ '%g'|format(gs.month_litres|round(1)) }} L{% if gs.l_per_hour %} · {{ '%.1f'|format(gs.l_per_hour) }} L/h{% endif %}{% if gs.month_kes %} · KES {{ '{:,.0f}'.format(gs.month_kes) }}{% endif %}</div>
+      <div class="stat-sub">This month: {{ '%g'|format(gs.month_hours|round(1)) }} h · {{ '%g'|format(gs.month_litres|round(1)) }} L{% if gs.l_per_hour %} · {{ '%.1f'|format(gs.l_per_hour) }} L/h{% endif %}{% if gs.month_kes and money %} · KES {{ '{:,.0f}'.format(gs.month_kes) }}{% endif %}</div>
     </div>
   {% endfor %}
   </div>
@@ -156,11 +157,11 @@
   {% if runs %}<div class="table-wrap"><table class="data"><thead><tr><th>Generator</th><th>Meter</th><th>Hours</th><th>Diesel</th><th>Powered</th><th>By</th><th></th></tr></thead><tbody>
   {% for r in runs %}<tr><td data-label="Generator"><strong>{{ r.gen_name }}</strong></td><td data-label="Meter">{{ '%g'|format(r.start_hours) }} → {{ '%g'|format(r.stop_hours) }}</td>
     <td data-label="Hours">{{ '%g'|format((r.stop_hours - r.start_hours)|round(1)) }}</td>
-    <td data-label="Diesel">{{ ('%g'|format(r.diesel_l) ~ ' L') if r.diesel_l else '—' }}{% if r.diesel_cost %}<div class="muted small">KES {{ '{:,.0f}'.format(r.diesel_cost) }}{% if r.from_store %} · store{% endif %}</div>{% endif %}</td>
+    <td data-label="Diesel">{{ ('%g'|format(r.diesel_l) ~ ' L') if r.diesel_l else '—' }}{% if r.diesel_cost and money %}<div class="muted small">KES {{ '{:,.0f}'.format(r.diesel_cost) }}{% if r.from_store %} · store{% endif %}</div>{% endif %}</td>
     <td data-label="Powered">{{ r.powered or '—' }}{% if r.block_code %} · {{ r.block_code }}{% endif %}</td><td data-label="By">{{ r.worker_name or '—' }}{% if r.notes %}<div class="muted small">{{ r.notes }}</div>{% endif %}</td>
     <td data-label="">{% if not r.from_store or is_manager %}{{ remove_btn('today.delete_run', 'rid', r.id, r.created_by, r.created_at) }}{% endif %}</td></tr>{% endfor %}
   </tbody></table></div>{% elif gens %}<p class="muted">No generator runs recorded for this day.</p>{% endif %}
-  {% for e in services %}<p class="small"><span class="pill gray">{{ 'Service' if e.event_type=='service' else 'Repair' }}</span> {{ e.gen_name }} at {{ '%g'|format(e.meter_hours) }} h: {{ e.notes }}{% if e.cost %} (KES {{ '{:,.0f}'.format(e.cost) }}){% endif %}</p>{% endfor %}
+  {% for e in services %}<p class="small"><span class="pill gray">{{ 'Service' if e.event_type=='service' else 'Repair' }}</span> {{ e.gen_name }} at {{ '%g'|format(e.meter_hours) }} h: {{ e.notes }}{% if e.cost and money %} (KES {{ '{:,.0f}'.format(e.cost) }}){% endif %}</p>{% endfor %}
 
   {% if not gens %}
     <p class="muted">No generator on record yet.</p>

@@ -40,7 +40,9 @@
   <tr>
     <td data-label="Name">{{ u.full_name }}</td>
     <td data-label="Username">{{ u.username }}</td>
-    <td data-label="Role">{{ role_labels[u.role] }}</td>
+    <td data-label="Role">{% if u.id == current_user.id %}{{ role_labels[u.role] }}{% else %}<form method="post" action="{{ url_for('admin.change_role', user_id=u.id) }}" class="btn-row" style="flex-wrap:nowrap;">
+      <select name="role">{% for r in role_choices %}<option value="{{ r }}" {{ 'selected' if r == u.role }}>{{ role_labels[r] }}</option>{% endfor %}</select>
+      <button class="btn small subtle" type="submit">Save</button></form>{% endif %}</td>
     <td data-label="Staff member"><form method="post" action="{{ url_for('admin.link_staff', user_id=u.id) }}" class="btn-row" style="flex-wrap:nowrap;">
       <select name="worker_id" style="min-width:130px;"><option value="">— not linked —</option>{% for w in staff %}<option value="{{ w.id }}" {{ 'selected' if u.worker_id==w.id }}>{{ w.name }}</option>{% endfor %}</select>
       <button class="btn small subtle" type="submit">Save</button></form></td>

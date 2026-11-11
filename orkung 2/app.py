@@ -1,5 +1,5 @@
 import os
-from flask import Flask, g, render_template, send_from_directory, request
+from flask import Flask, g, render_template, send_from_directory, request, redirect, url_for, abort
 from config import Config
 import db
 import auth
@@ -20,6 +20,11 @@ def create_app(config_object=Config):
     @app.before_request
     def _load_user():
         auth.load_logged_in_user()
+        u = g.get("user")
+        if u and u["role"] == "worker" and not auth.worker_may_open(request.endpoint, request.blueprint):
+            if request.method == "GET":
+                return redirect(url_for("farmapp.my_jobs"))
+            abort(403)
 
     @app.context_processor
     def inject_globals():

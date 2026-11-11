@@ -86,8 +86,7 @@ def staff_logins():
     for w in staff:
         if w["id"] in linked:
             continue
-        role = "manager" if "manager" in (w["job_title"] or "").lower() else "worker"
-        todo.append(dict(w=w, username=_suggest_username(w["name"], taken), role=role))
+        todo.append(dict(w=w, username=_suggest_username(w["name"], taken), role="worker"))
     farmphone_exists = "farmphone" in taken
 
     if request.method == "GET":
@@ -145,6 +144,25 @@ def add_user():
                         (username, generate_password_hash(password), full_name, role, request.form.get("email"), wid))
     db.audit(g.user, "create", "user", new_id, f"Created user {username} ({role})")
     flash("User created.", "success")
+    return redirect(url_for("admin.users"))
+
+
+@bp.route("/users/<int:user_id>/role", methods=["POST"])
+@auth.login_required
+@auth.require_roles("admin")
+def change_role(user_id):
+    u = db.query("SELECT * FROM users WHERE id=?", (user_id,), one=True)
+    if not u:
+        abort(404)
+    role = request.form.get("role")
+    if role not in auth.ROLES:
+        abort(400)
+    if u["id"] == g.user["id"]:
+        flash("You cannot change your own role.", "error")
+        return redirect(url_for("admin.users"))
+    db.execute("UPDATE users SET role=? WHERE id=?", (role, user_id))
+    db.audit(g.user, "update", "user", user_id, f"{u['username']} role changed from {u['role']} to {role}")
+    flash(f"{u['username']} is now {auth.ROLE_LABELS[role]}.", "success")
     return redirect(url_for("admin.users"))
 
 
