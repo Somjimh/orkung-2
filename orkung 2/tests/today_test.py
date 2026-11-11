@@ -316,6 +316,26 @@ check("day report has staff, jobs, feeding, generator and sign-off",
 check("day report for an empty day still opens", manager.get("/work/day/report?d=2020-01-01").status_code == 200)
 check("field worker login cannot open day report", kapuo_c.get(f"/work/day/report?d={TODAY}").status_code in (302, 403))
 
+# ---------------------------------------------------------------------------
+# Logins for all staff in one go
+# ---------------------------------------------------------------------------
+import re as _re
+pg = text(admin.get("/admin/users/staff-logins"))
+check("staff-logins page lists staff without a login", "Ali Juma" in pg and "Veronicah" in pg)
+check("staff already linked are not offered again", 'name="make_%d"' % kapuo["id"] not in pg)
+check("manager cannot open staff-logins", manager.get("/admin/users/staff-logins").status_code in (302, 403))
+r = admin.post("/admin/users/staff-logins", data={f"make_{ali['id']}": "1", f"username_{ali['id']}": "ali", f"role_{ali['id']}": "worker"})
+cards = text(r)
+m = _re.search(r"Password / Nenosiri</span><b>([a-z]+\d{4})</b>", cards)
+check("cards page shows a first password", r.status_code == 200 and m is not None)
+u = q("SELECT * FROM users WHERE username='ali'")
+check("login created and linked to the staff member", u and u[0]["worker_id"] == ali["id"] and u[0]["role"] == "worker")
+check("unticked staff are skipped", not q("SELECT 1 FROM users WHERE worker_id=?", (vero["id"],)))
+if m:
+    ali_c = client("ali", m.group(1))
+pg = text(admin.get("/admin/users/staff-logins"))
+check("created login now shows as already set up", "ali" in pg and 'name="make_%d"' % ali["id"] not in pg)
+
 print()
 if FAILS:
     print(f"{len(FAILS)} CHECK(S) FAILED:")

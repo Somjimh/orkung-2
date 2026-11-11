@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Staff logins - {{ app_name }}{% endblock %}
+{% block heading %}Staff logins{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('admin.users') }}">&larr; Back to Users</a></p>
+
+<div class="card section">
+  <h3>Create a login for each staff member</h3>
+  <p class="small muted">Each login is linked to the person's name, so on their phone they see and tick only their own jobs.
+    A first password is made for each person and shown <strong>once</strong> on printable cards on the next page. Print or photograph them before you leave that page.</p>
+  {% if todo or not farmphone_exists %}
+  <form method="post">
+    <div class="table-wrap"><table class="data">
+      <thead><tr><th>Create</th><th>Staff member</th><th>Job</th><th>Username</th><th>Role</th></tr></thead>
+      <tbody>
+      {% for t in todo %}
+      <tr>
+        <td data-label="Create"><input type="checkbox" name="make_{{ t.w.id }}" value="1" checked></td>
+        <td data-label="Staff member"><strong>{{ t.w.name }}</strong></td>
+        <td data-label="Job">{{ t.w.job_title or '' }}</td>
+        <td data-label="Username"><input type="text" name="username_{{ t.w.id }}" value="{{ t.username }}" style="max-width:160px;" pattern="[a-zA-Z0-9]+" required></td>
+        <td data-label="Role"><select name="role_{{ t.w.id }}">
+          {% for r in ('worker','manager','storekeeper') %}<option value="{{ r }}" {{ 'selected' if r == t.role }}>{{ role_labels[r] }}</option>{% endfor %}
+        </select></td>
+      </tr>
+      {% endfor %}
+      {% if not farmphone_exists %}
+      <tr>
+        <td data-label="Create"><input type="checkbox" name="make_farmphone" value="1" checked></td>
+        <td data-label="Staff member"><strong>Shared farm phone</strong></td>
+        <td data-label="Job">For anyone without a smartphone: they pick their name, then tick their jobs</td>
+        <td data-label="Username">farmphone</td>
+        <td data-label="Role">{{ role_labels['worker'] }}</td>
+      </tr>
+      {% endif %}
+      </tbody>
+    </table></div>
+    <p class="small muted">Worker: sees and ticks own jobs, harvests, sprays. Manager: everything except approving pay (use for the farm manager who confirms the day).</p>
+    <button class="btn" type="submit">Create logins and print cards</button>
+  </form>
+  {% else %}
+  <p>Every active staff member already has a login.</p>
+  {% endif %}
+</div>
+
+{% if done %}
+<div class="card section">
+  <h3>Already have a login</h3>
+  <ul style="margin:.3rem 0 0;">{% for w, u in done %}<li>{{ w.name }}: <strong>{{ u.username }}</strong> ({{ role_labels[u.role] }}){% if not u.active %} (switched off){% endif %}</li>{% endfor %}</ul>
+  <p class="small muted">To give someone a new password, use Reset password on the Users page.</p>
+</div>
+{% endif %}
+{% endblock %}
