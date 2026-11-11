@@ -250,7 +250,7 @@ check("sale on credit saved", s["kg"] * s["price_per_kg"] == 6250 and s["amount_
 manager.post(f"/crops/sales/{s['id']}/payment", data={"amount": "6250", "ref": "QWE123"})
 check("payment clears the balance", q("SELECT amount_paid FROM crop_sales")[0]["amount_paid"] == 6250)
 r = worker.get("/crops/sales")
-check("farm worker cannot see sales", r.status_code == 403)
+check("farm worker cannot see sales", r.status_code in (302, 403))
 
 # ---------------------------------------------------------------------------
 # 6. Payroll for September 2026
@@ -258,7 +258,7 @@ check("farm worker cannot see sales", r.status_code == 403)
 manager.post("/payroll/advance", data={"worker_id": asha["id"], "amount": "2000", "advance_date": "2026-09-10",
                                        "reason": "school fees"})
 r = worker.get("/payroll")
-check("farm worker cannot open payroll", r.status_code == 403)
+check("farm worker cannot open payroll", r.status_code in (302, 403))
 r = store.get("/payroll")
 check("storekeeper cannot open payroll", r.status_code == 403)
 manager.post("/payroll/run", data={"period": "2026-09"})
@@ -323,7 +323,7 @@ store.post(f"/assets/{a['id']}/event", data={"event_type": "repair", "cost": "80
 check("repair cost recorded and condition good", q("SELECT condition FROM assets")[0]["condition"] == "good"
       and q("SELECT SUM(cost) s FROM asset_events")[0]["s"] == 800)
 r = worker.get("/assets")
-check("farm worker cannot open assets", r.status_code == 403)
+check("farm worker cannot open assets", r.status_code in (302, 403))
 
 # ---------------------------------------------------------------------------
 # 8. Milestones
@@ -359,12 +359,12 @@ allowed = {
     "manager": pages,
     "viewer": [p for p in pages],
     "store": ["/crops", "/crops/harvests", "/crops/sales", "/stock", f"/stock/{item['id']}", "/assets", "/milestones", "/reports", "/"],
-    "worker": ["/crops", "/crops/harvests", "/stock", "/reports", "/"],
+    "worker": ["/crops/harvests", "/today", "/animals", "/farm/jobs"],
     "vet": ["/stock", "/reports", "/"],
 }
 denied = {
     "store": ["/payroll", "/work/day", "/work/staff"],
-    "worker": ["/payroll", "/work/day", "/assets", "/milestones", "/crops/sales"],
+    "worker": ["/payroll", "/work/day", "/assets", "/milestones", "/crops/sales", "/crops", "/stock", "/reports", "/"],
     "vet": ["/crops", "/payroll", "/work/day", "/assets"],
 }
 sessions = dict(manager=manager, viewer=viewer, store=store, worker=worker, vet=vet)
@@ -372,7 +372,9 @@ for who, ps in allowed.items():
     bad = [p for p in ps if sessions[who].get(p).status_code != 200]
     check(f"{who} can open their pages", not bad, bad)
 for who, ps in denied.items():
-    bad = [p for p in ps if sessions[who].get(p).status_code != 403]
+    # workers are sent back to their own jobs; other roles get "not allowed"
+    ok = (302, 403) if who == "worker" else (403,)
+    bad = [p for p in ps if sessions[who].get(p).status_code not in ok]
     check(f"{who} is blocked from others", not bad, bad)
 # menu shows the right sections
 html = store.get("/").get_data(as_text=True)
@@ -411,9 +413,10 @@ h = store.get("/").get_data(as_text=True)
 check("storekeeper dashboard: store, assets, crops, no pay or labour",
       "Store alerts" in h and "Assets" in h and "Harvested (kg)" in h and "Labour cost" not in h and "Payroll</div>" not in h
       and "Crop sales" in h)
-h = worker.get("/").get_data(as_text=True)
-check("farm worker dashboard: harvests and store only, no money cards",
-      "Harvested (kg)" in h and "Store alerts" in h and "Crop sales" not in h and "Labour cost" not in h)
+r = worker.get("/")
+check("farm worker home goes to their own jobs, no money dashboard", r.status_code == 302 and "/farm/jobs" in r.headers.get("Location", ""))
+h = worker.get("/today").get_data(as_text=True)
+check("farm worker Today page shows no money", "KES " not in h.replace("Cost (KES)", "").replace("Diesel cost (KES)", ""))
 h = vet.get("/").get_data(as_text=True)
 check("vet dashboard: store only, no crops", "Store alerts" in h and "Harvested (kg)" not in h)
 with app.app_context():
