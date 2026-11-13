@@ -177,16 +177,28 @@ def day_records(d):
 
     gens = [gen_status(a) for a in generators()]
 
+    # Jobs ticked by staff on their phones (farm app), with before/after photos
+    tasks = db.query("SELECT t.*, w.name AS worker_name, b.code AS block_code FROM job_tasks t "
+                     "JOIN workers w ON w.id=t.worker_id LEFT JOIN crop_blocks b ON b.id=t.block_id "
+                     "WHERE t.task_date=? ORDER BY w.name, t.status, t.id", (d,))
+    tasks = [dict(t, title=(t["title_en"] or "")) for t in tasks]
+    photos = [t for t in tasks if t["photo_before"] or t["photo"]]
+
     # Day summary and things to look at (shown to everyone; the manager acts on them)
     present = db.query("SELECT w.id, w.name FROM attendance a JOIN workers w ON w.id=a.worker_id "
                        "WHERE a.work_date=? AND a.status IN ('present','half') ORDER BY w.name", (d,))
-    with_job = {j["worker_id"] for j in jobs}
+    with_job = {j["worker_id"] for j in jobs} | {t["worker_id"] for t in tasks if t["status"] == "done"}
     no_job = [p for p in present if p["id"] not in with_job]
     gen_hours = sum((r["stop_hours"] - r["start_hours"]) for r in runs)
     diesel = sum((r["diesel_l"] or 0) for r in runs)
     flags = []
     for p in no_job:
         flags.append(("amber", f"{p['name']} is marked at work but has no job recorded."))
+    for t in tasks:
+        if t["status"] == "not_done":
+            flags.append(("amber", f"{t['worker_name']} could not do \"{t['title']}\"" + (f": {t['note']}" if t["note"] else ".")))
+        elif t["status"] == "open" and t["photo_before"]:
+            flags.append(("amber", f"{t['worker_name']} started \"{t['title']}\" (before photo taken) but has not finished it."))
     for gs in gens:
         if gs["state"] == "due":
             flags.append(("red", f"{gs['asset']['name']} is due for a service: {gs['since']:g} hours since the last one "
@@ -213,12 +225,13 @@ def day_records(d):
         if s["safe"]:
             flags.append(("amber", f"Block {s['block_code']}: no harvest for sale before {s['safe']} ({s['item']})."))
 
-    summary = dict(at_work=len(present), jobs=len(jobs), feed_kg=sum(f["kg"] for f in feeds),
+    summary = dict(at_work=len(present), jobs=len(jobs) + sum(1 for t in tasks if t["status"] == "done"),
+                   app_open=sum(1 for t in tasks if t["status"] == "open"), feed_kg=sum(f["kg"] for f in feeds),
                    feed_cost=sum((f["cost"] or 0) for f in feeds), sprays=len(spray_rows),
                    gen_hours=gen_hours, diesel=diesel)
 
     return dict(jobs=jobs, feeds=feeds, sprays=spray_rows, runs=runs, services=services, gens=gens,
-                present=present, no_job=no_job, flags=flags, summary=summary)
+                present=present, no_job=no_job, flags=flags, summary=summary, tasks=tasks, photos=photos)
 
 
 @bp.route("")

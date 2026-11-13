@@ -38,6 +38,19 @@
 </div>
 {% else %}<div class="card"><div class="meta">{{ t('no_jobs') }}</div></div>{% endif %}
 
+{% set ba = [] %}{% for p in people %}{% for j in p.jobs %}{% if j.photo_before or (j.ba and j.photo) %}{% set _ = ba.append(j) %}{% endif %}{% endfor %}{% endfor %}
+{% if ba %}
+<h2 class="sec">📷 {{ t('before_photo') }} / {{ t('after_photo') }}</h2>
+<div class="list">{% for j in ba %}<div style="display:block">
+  <div class="t">{{ j.worker_name }} · {{ j.title }}</div>
+  <div class="row" style="flex-wrap:nowrap;gap:8px;margin-top:6px">
+    {% for ph, at in [(j.photo_before, j.before_at), (j.photo, j.done_at)] %}
+    <div style="flex:1;text-align:center">{% if ph %}<a href="{{ url_for('farmapp.photo', name=ph) }}"><img src="{{ url_for('farmapp.photo', name=ph) }}" alt="{{ t('before_photo') if loop.first else t('after_photo') }}" style="width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:10px"></a>{% else %}<div class="meta" style="aspect-ratio:4/3;display:flex;align-items:center;justify-content:center;background:#f1f1f1;border-radius:10px">—</div>{% endif %}
+      <div class="s">{{ t('before_photo') if loop.first else t('after_photo') }}{% if ph and at %} · {{ at|eat_time }}{% endif %}</div></div>
+    {% endfor %}
+  </div></div>{% endfor %}</div>
+{% endif %}
+
 {% if weighed %}
 <h2 class="sec">{{ t('weighed') }}</h2>
 <div class="list">{% for j in weighed %}<div><div><div class="t">{{ j.title }}</div><div class="s">{{ j.worker_name }}</div></div>

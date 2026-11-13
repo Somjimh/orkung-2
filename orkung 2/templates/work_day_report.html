@@ -36,6 +36,14 @@
   .sign > div { border-top: 1px solid var(--ink); padding-top: 4px; font-size: 11px; color: var(--mute); }
   .sign .space { height: 30px; }
   footer { margin-top: 1rem; font-size: 10px; color: var(--mute); display: flex; justify-content: space-between; }
+  .photos { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .pair { border: 1px solid var(--line); border-radius: 6px; padding: 6px; page-break-inside: avoid; }
+  .pair .pt { font-size: 11.5px; margin-bottom: 4px; }
+  .imgs { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+  .imgs figure { margin: 0; text-align: center; }
+  .imgs img, .nophoto { width: 100%; aspect-ratio: 4/3; object-fit: cover; border-radius: 4px; display: block; }
+  .nophoto { background: #eef1ee; color: var(--mute); display: flex; align-items: center; justify-content: center; font-size: 10px; }
+  .imgs figcaption { font-size: 10px; color: var(--mute); margin-top: 2px; }
   @page { size: A4; margin: 10mm; }
   @media print {
     body { background: #fff; }
@@ -72,8 +80,8 @@
     <tr>
       <td><strong>{{ w.name }}</strong>{% if w.job_title %}<div class="muted">{{ w.job_title }}</div>{% endif %}</td>
       <td>{{ att_label.get(a.status, a.status) if a else '—' }}</td>
-      <td>{% for j in js %}<div class="job">{{ j.activity }}{% if j.block_code %} · {{ j.block_code }}{% endif %}{% if j.quantity is not none %} · {{ '%g'|format(j.quantity) }} {{ j.unit or '' }}{% endif %}{% if j.hours %} · {{ '%g'|format(j.hours) }} h{% endif %}{% if j.notes and j.source != 'sheet' %} <span class="muted">({{ j.notes }})</span>{% endif %}</div>
-        {% else %}{% if a and a.status in ('present','half') %}<span class="warn">At work — no job recorded</span>{% else %}<span class="muted">—</span>{% endif %}{% endfor %}</td>
+      <td>{% set ts = tasks_by.get(w.id, []) %}{% for t in ts %}<div class="job">{{ '✓' if t.status=='done' else '✕' if t.status=='not_done' else '·' }} {{ t.title }}{% if t.block_code %} · {{ t.block_code }}{% endif %}{% if t.qty %} · {{ '%g'|format(t.qty) }} {{ t.unit or 'kg' }}{% endif %}{% if t.photo_before or t.photo %} · 📷{% endif %}{% if t.status=='not_done' and t.note %} <span class="warn">({{ t.note }})</span>{% elif t.status=='open' %} <span class="muted">(not finished)</span>{% endif %}</div>{% endfor %}{% for j in js %}<div class="job">{{ j.activity }}{% if j.block_code %} · {{ j.block_code }}{% endif %}{% if j.quantity is not none %} · {{ '%g'|format(j.quantity) }} {{ j.unit or '' }}{% endif %}{% if j.hours %} · {{ '%g'|format(j.hours) }} h{% endif %}{% if j.notes and j.source != 'sheet' %} <span class="muted">({{ j.notes }})</span>{% endif %}</div>
+        {% else %}{% if ts %}{% elif a and a.status in ('present','half') %}<span class="warn">At work — no job recorded</span>{% else %}<span class="muted">—</span>{% endif %}{% endfor %}</td>
       <td>{{ (a.notes if a and a.notes) or '' }}</td>
     </tr>
     {% endfor %}
@@ -101,6 +109,23 @@
   {% if rec.runs %}<table><thead><tr><th>Generator</th><th>Hour meter</th><th>Hours</th><th>Diesel</th><th>Used for</th></tr></thead><tbody>
   {% for r in rec.runs %}<tr><td>{{ r.gen_name }}</td><td>{{ '%g'|format(r.start_hours) }} → {{ '%g'|format(r.stop_hours) }}</td><td>{{ '%g'|format(r.stop_hours - r.start_hours) }}</td><td>{{ ('%g'|format(r.diesel_l) ~ ' L') if r.diesel_l else '—' }}</td><td>{{ r.powered or '' }}{% if r.block_code %} · {{ r.block_code }}{% endif %}</td></tr>{% endfor %}
   </tbody></table>{% else %}<p class="none">No generator running recorded.</p>{% endif %}
+
+  {% if rec.photos %}
+  <h2>Before and after photos</h2>
+  <div class="photos">
+  {% for t in rec.photos %}
+    <div class="pair">
+      <div class="pt"><strong>{{ t.worker_name }}</strong> · {{ t.title }}{% if t.block_code %} · {{ t.block_code }}{% endif %}</div>
+      <div class="imgs">
+        {% for label, ph, at in [('Before', t.photo_before, t.before_at), ('After', t.photo, t.done_at)] %}
+        <figure>{% if ph %}<img src="{{ url_for('farmapp.photo', name=ph) }}" alt="{{ label }}: {{ t.title }}">{% else %}<div class="nophoto">no photo</div>{% endif %}
+          <figcaption>{{ label }}{% if ph and at %} · {{ at|eat_time }}{% endif %}</figcaption></figure>
+        {% endfor %}
+      </div>
+    </div>
+  {% endfor %}
+  </div>
+  {% endif %}
 
   {% if rec.flags %}
   <h2>Points to follow up</h2>

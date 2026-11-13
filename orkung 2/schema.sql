@@ -613,7 +613,9 @@ CREATE TABLE IF NOT EXISTS job_tasks (
     status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','done','not_done')),
     qty REAL,
     unit TEXT,
-    photo TEXT,                                     -- file name in the farm-photos folder
+    photo TEXT,                                     -- file name in the farm-photos folder (the "after" photo)
+    photo_before TEXT,                              -- "before" photo, taken when the job is started
+    before_at TEXT,
     note TEXT,
     done_at TEXT,
     done_by INTEGER REFERENCES users(id),

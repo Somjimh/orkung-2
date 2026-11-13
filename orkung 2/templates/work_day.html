@@ -44,6 +44,7 @@
       <td data-label="Main job"><select name="a_{{ w.id }}" {{ 'disabled' if not editable }}><option value="">—</option>
         {% for x in activities %}<option {{ 'selected' if s and s.activity==x }}>{{ x }}</option>{% endfor %}
         {% if s and s.activity not in activities %}<option selected>{{ s.activity }}</option>{% endif %}</select>
+        {% for t in tasks_by.get(w.id, []) %}<div class="small" style="margin-top:.3rem;color:{{ 'var(--green-800)' if t.status=='done' else 'var(--amber-600)' if t.status=='not_done' else 'var(--ink-500)' }};">📱 {{ '✓' if t.status=='done' else '✕' if t.status=='not_done' else '·' }} {{ t.title }}{% if t.block_code %} · {{ t.block_code }}{% endif %}{% if t.qty %} · {{ '%g'|format(t.qty) }} {{ t.unit or 'kg' }}{% endif %}{% if t.photo_before or t.photo %} · 📷{% endif %}{% if t.status=='not_done' and t.note %} — {{ t.note }}{% endif %}</div>{% endfor %}
         {% for j in jobs_by.get(w.id, []) if j.source != 'sheet' %}<div class="small" style="margin-top:.3rem;color:var(--green-800);">+ {{ j.activity }}{% if j.block_code %} · {{ j.block_code }}{% endif %}{% if j.quantity is not none %} · {{ '%g'|format(j.quantity) }} {{ j.unit or '' }}{% endif %}{% if j.hours %} · {{ '%g'|format(j.hours) }} h{% endif %}</div>{% endfor %}</td>
       <td data-label="Block"><select name="b_{{ w.id }}" style="min-width:110px;" {{ 'disabled' if not editable }}><option value="">—</option>
         {% for b in blocks %}<option value="{{ b.id }}" {{ 'selected' if s and s.block_id==b.id }}>{{ b.code }}</option>{% endfor %}</select></td>
@@ -95,6 +96,30 @@
   {% for r in rec.runs %}<tr><td data-label="Generator">{{ r.gen_name }}</td><td data-label="Hour meter">{{ '%g'|format(r.start_hours) }} → {{ '%g'|format(r.stop_hours) }}</td><td data-label="Hours">{{ '%g'|format(r.stop_hours - r.start_hours) }}</td><td data-label="Diesel">{{ ('%g'|format(r.diesel_l) ~ ' L') if r.diesel_l else '—' }}</td><td data-label="Used for">{{ r.powered or '' }}{% if r.block_code %} · {{ r.block_code }}{% endif %}</td></tr>{% endfor %}
   </tbody></table></div>{% else %}<p class="small muted">No generator running recorded.</p>{% endif %}
 </div>
+
+{% if rec.photos %}
+<div class="card section">
+  <div class="btn-row" style="justify-content:space-between;"><h3 style="margin:0;">Before and after photos</h3>
+    {% if current_user.role == 'admin' %}<a class="btn small secondary" href="{{ url_for('farmapp.photos') }}">Save &amp; clear photos &rarr;</a>{% endif %}</div>
+  <div class="grid cols-2" style="gap:.8rem;">
+  {% for t in rec.photos %}
+    <div style="border:1px solid var(--line, #dde3de);border-radius:10px;padding:.6rem;">
+      <div style="font-weight:700;">{{ t.worker_name }} · {{ t.title }}</div>
+      <div class="small muted">{{ t.block_code or '' }}{% if t.status != 'done' %} · {{ 'not finished' if t.status=='open' else 'not done' }}{% endif %}</div>
+      <div style="display:flex;gap:.5rem;margin-top:.4rem;">
+        {% for label, ph, at in [('Before', t.photo_before, t.before_at), ('After', t.photo, t.done_at)] %}
+        <figure style="margin:0;flex:1;text-align:center;">
+          {% if ph %}<a href="{{ url_for('farmapp.photo', name=ph) }}" target="_blank"><img src="{{ url_for('farmapp.photo', name=ph) }}" alt="{{ label }}: {{ t.title }}" style="width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:6px;"></a>
+          {% else %}<div style="width:100%;aspect-ratio:4/3;border-radius:6px;background:#eef1ee;display:flex;align-items:center;justify-content:center;" class="small muted">no photo</div>{% endif %}
+          <figcaption class="small muted">{{ label }}{% if ph and at %} · {{ at|eat_time }}{% endif %}</figcaption>
+        </figure>
+        {% endfor %}
+      </div>
+    </div>
+  {% endfor %}
+  </div>
+</div>
+{% endif %}
 
 {% if rec.flags %}
 <div class="card section">

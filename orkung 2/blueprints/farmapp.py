@@ -50,16 +50,60 @@ def _photo_dir():
     return d
 
 
+PHOTO_MAX_SIDE = 1280  # pixels; plenty to see the work, about 150-300 KB a photo
+
+
 def _save_photo(field):
+    """Save an uploaded photo. Phone photos (3-5 MB) are shrunk to at most
+    1280 px and saved as JPEG so the disk does not fill up."""
     f = request.files.get(field)
     if not f or not f.filename:
         return None
     ext = os.path.splitext(secure_filename(f.filename))[1].lower() or ".jpg"
     if ext not in PHOTO_TYPES:
         raise ValueError("bad_photo")
-    name = f"{date.today():%Y%m}-{uuid.uuid4().hex[:12]}{ext}"
+    stem = f"{date.today():%Y%m}-{uuid.uuid4().hex[:12]}"
+    try:
+        from PIL import Image, ImageOps
+        img = Image.open(f.stream)
+        img = ImageOps.exif_transpose(img)  # phones save portrait photos sideways
+        img.thumbnail((PHOTO_MAX_SIDE, PHOTO_MAX_SIDE))
+        if img.mode not in ("RGB", "L"):
+            img = img.convert("RGB")
+        name = stem + ".jpg"
+        img.save(os.path.join(_photo_dir(), name), "JPEG", quality=78, optimize=True)
+        return name
+    except Exception:
+        # Pillow missing, or a picture it cannot read (e.g. some iPhone HEIC):
+        # keep the photo as it came rather than lose it.
+        pass
+    f.stream.seek(0)
+    name = stem + ext
     f.save(os.path.join(_photo_dir(), name))
     return name
+
+
+@bp.app_template_filter("eat_time")
+def eat_time(stamp):
+    """'2026-11-13 05:12:00' (UTC, as SQLite stores it) -> '08:12' Kenya time."""
+    from datetime import datetime as _dt
+    try:
+        return (_dt.fromisoformat(str(stamp)) + timedelta(hours=3)).strftime("%H:%M")
+    except (TypeError, ValueError):
+        return ""
+
+
+# Jobs in these areas need a photo before starting and a photo when done.
+BEFORE_AFTER_DEFAULT = "apiary,bananas,chillies,passion,fodder,nursery"
+
+
+def before_after_areas():
+    return {a.strip() for a in farm.setting("before_after_areas", BEFORE_AFTER_DEFAULT).split(",") if a.strip()}
+
+
+def needs_before_after(task_or_area):
+    area = task_or_area if isinstance(task_or_area, str) else task_or_area["area"]
+    return area in before_after_areas()
 
 
 def linked_worker():
@@ -163,7 +207,7 @@ def jobs_for(d, worker_id=None):
     for t in db.query(sql, args):
         late = (d - date.fromisoformat(t["task_date"])).days
         out.append(dict(t, late=late, title=tx.title(t), area_info=tx.AREA.get(t["area"]) or tx.AREA["general"],
-                        area_label=tx.area_name(t["area"])))
+                        area_label=tx.area_name(t["area"]), ba=needs_before_after(t)))
     return out
 
 
@@ -284,6 +328,7 @@ def my_jobs():
     jobs = jobs_for(d, who["id"]) if who else []
     done = sum(1 for j in jobs if j["status"] == "done")
     return render_template("farm/jobs.html", d=d, day_text=tx.long_date(d), who=who, staff=staff,
+                           ba_names=", ".join(tx.area_name(a) for a, *_ in tx.AREAS if a in before_after_areas()),
                            pick=not self_only(), jobs=jobs, done=done, total=len(jobs),
                            blocks=farm.blocks(), areas=tx.AREAS,
                            can_edit=g.user["role"] in EDIT_ROLES and d <= date.today(),
@@ -297,6 +342,31 @@ def _back_to_jobs(task_or_wid, d):
     if not self_only():
         args["w"] = wid
     return redirect(url_for("farmapp.my_jobs", **args))
+
+
+@bp.route("/jobs/<int:tid>/start", methods=["POST"])
+@auth.login_required
+@auth.require_roles(*EDIT_ROLES)
+def job_start(tid):
+    """Take the 'before' photo and start the job."""
+    task = db.query("SELECT * FROM job_tasks WHERE id=?", (tid,), one=True)
+    if not task:
+        abort(404)
+    back_d = request.form.get("d") or task["task_date"]
+    if not _can_touch(task):
+        abort(403)
+    try:
+        ph = _save_photo("photo_before")
+    except ValueError:
+        flash("Photo must be a JPG or PNG picture.", "error")
+        return _back_to_jobs(task, back_d)
+    if not ph:
+        flash(tx.t("ba_first") + "!", "error")
+        return _back_to_jobs(task, back_d)
+    db.execute("UPDATE job_tasks SET photo_before=?, before_at=datetime('now') WHERE id=?", (ph, tid))
+    db.audit(g.user, "update", "job_task", tid, f"Started (before photo): {task['title_en']}")
+    flash(f"▶ {tx.title(task)}", "success")
+    return _back_to_jobs(task, back_d)
 
 
 @bp.route("/jobs/<int:tid>/done", methods=["POST"])
@@ -318,7 +388,10 @@ def job_done(tid):
     except ValueError:
         flash("Photo must be a JPG or PNG picture.", "error")
         return _back_to_jobs(task, back_d)
-    if task["needs_photo"] and not ph and not task["photo"]:
+    if needs_before_after(task) and not task["photo_before"]:
+        flash(tx.t("ba_first") + "!", "error")
+        return _back_to_jobs(task, back_d)
+    if (task["needs_photo"] or needs_before_after(task)) and not ph and not task["photo"]:
         flash(tx.t("take_photo") + "!", "error")
         return _back_to_jobs(task, back_d)
     db.execute("UPDATE job_tasks SET status='done', qty=?, unit=?, photo=COALESCE(?, photo), note=?, "
@@ -386,15 +459,21 @@ def job_add():
         flash(tx.t("what_job"), "error")
         return redirect(url_for("farmapp.my_jobs", d=d.isoformat()))
     qty = request.form.get("qty", type=float)
+    if needs_before_after(area) and not (request.files.get("photo_before") and request.files["photo_before"].filename
+                                         and request.files.get("photo") and request.files["photo"].filename):
+        flash(tx.t("ba_needed") + ": " + tx.area_name(area), "error")
+        return _back_to_jobs(wid, d.isoformat())
     try:
         ph = _save_photo("photo")
+        ph_before = _save_photo("photo_before")
     except ValueError:
         flash("Photo must be a JPG or PNG picture.", "error")
         return _back_to_jobs(wid, d.isoformat())
     tid = db.execute("INSERT INTO job_tasks (task_date, worker_id, area, title_en, title_sw, block_id, status, qty, unit, "
-                     "photo, note, done_at, done_by, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,datetime('now'),?,?)",
+                     "photo, photo_before, before_at, note, done_at, done_by, created_by) "
+                     "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'),?,?)",
                      (d.isoformat(), wid, area, title, title, request.form.get("block_id", type=int) or None, "done",
-                      qty, "kg" if qty else None, ph, (request.form.get("note") or "").strip() or None,
+                      qty, "kg" if qty else None, ph, ph_before, None, (request.form.get("note") or "").strip() or None,
                       g.user["id"], g.user["id"]))
     db.audit(g.user, "create", "job_task", tid, f"Extra job for worker {wid}: {title}")
     flash(f"✓ {title}", "success")
@@ -670,3 +749,114 @@ def _load_suggested():
     if n:
         db.audit(g.user, "create", "routine", None, f"Loaded {n} suggested routine jobs")
     return n
+
+
+# ---------------------------------------------------------------------------
+# Weekly photo download and clean-up (admin)
+# ---------------------------------------------------------------------------
+
+def _photo_rows():
+    """Every stored job and spray photo: (date, kind, label, column info, file name)."""
+    rows = []
+    for t in db.query("SELECT t.id, t.task_date, t.title_en, t.photo, t.photo_before, w.name AS worker_name "
+                      "FROM job_tasks t JOIN workers w ON w.id=t.worker_id "
+                      "WHERE t.photo IS NOT NULL OR t.photo_before IS NOT NULL"):
+        if t["photo_before"]:
+            rows.append(dict(day=t["task_date"], table="job_tasks", col="photo_before", id=t["id"], file=t["photo_before"],
+                             label=f"{t['task_date']}_{t['worker_name']}_{t['title_en']}_1-before"))
+        if t["photo"]:
+            rows.append(dict(day=t["task_date"], table="job_tasks", col="photo", id=t["id"], file=t["photo"],
+                             label=f"{t['task_date']}_{t['worker_name']}_{t['title_en']}" + ("_2-after" if t["photo_before"] else "")))
+    for sp in db.query("SELECT s.id, s.spray_date, s.product, s.photo, b.code FROM spray_records s "
+                       "JOIN crop_blocks b ON b.id=s.block_id WHERE s.photo IS NOT NULL"):
+        rows.append(dict(day=sp["spray_date"], table="spray_records", col="photo", id=sp["id"], file=sp["photo"],
+                         label=f"{sp['spray_date']}_spray_{sp['code']}_{sp['product']}"))
+    return rows
+
+
+def _week_start(day):
+    d = date.fromisoformat(day[:10])
+    return d - timedelta(days=d.weekday())
+
+
+def _weeks():
+    weeks = {}
+    folder = _photo_dir()
+    for r in _photo_rows():
+        wk = weeks.setdefault(_week_start(r["day"]), dict(rows=[], size=0))
+        wk["rows"].append(r)
+        path = os.path.join(folder, r["file"])
+        wk["size"] += os.path.getsize(path) if os.path.exists(path) else 0
+    return weeks
+
+
+@bp.route("/photos")
+@auth.login_required
+@auth.require_roles("admin")
+def photos():
+    weeks = _weeks()
+    listing = [dict(start=k, end=k + timedelta(days=6), count=len(v["rows"]), mb=v["size"] / 1048576,
+                    current=k == _week_start(date.today().isoformat()))
+               for k, v in sorted(weeks.items(), reverse=True)]
+    total_mb = sum(w["mb"] for w in listing)
+    return render_template("farm_photos.html", weeks=listing, total_mb=total_mb,
+                           total=sum(w["count"] for w in listing))
+
+
+@bp.route("/photos/<wk>.zip")
+@auth.login_required
+@auth.require_roles("admin")
+def photos_zip(wk):
+    import io
+    import re
+    import zipfile
+    from flask import send_file
+    try:
+        start = date.fromisoformat(wk)
+    except ValueError:
+        abort(404)
+    rows = _weeks().get(start, dict(rows=[]))["rows"]
+    if not rows:
+        abort(404)
+    buf = io.BytesIO()
+    used = set()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_STORED) as z:
+        for r in sorted(rows, key=lambda x: x["label"]):
+            path = os.path.join(_photo_dir(), r["file"])
+            if not os.path.exists(path):
+                continue
+            base = re.sub(r"[^A-Za-z0-9._-]+", "-", r["label"]).strip("-")[:120]
+            name, n = base, 2
+            while name in used:
+                name, n = f"{base}-{n}", n + 1
+            used.add(name)
+            z.write(path, name + os.path.splitext(r["file"])[1])
+    buf.seek(0)
+    db.audit(g.user, "export", "photos", None, f"Downloaded photos for week of {start}")
+    return send_file(buf, mimetype="application/zip", as_attachment=True,
+                     download_name=f"Orkung-photos-{start}-to-{start + timedelta(days=6)}.zip")
+
+
+@bp.route("/photos/<wk>/delete", methods=["POST"])
+@auth.login_required
+@auth.require_roles("admin")
+def photos_delete(wk):
+    try:
+        start = date.fromisoformat(wk)
+    except ValueError:
+        abort(404)
+    if not request.form.get("saved"):
+        flash("Tick the box to confirm you have saved the photos first.", "error")
+        return redirect(url_for("farmapp.photos"))
+    rows = _weeks().get(start, dict(rows=[]))["rows"]
+    removed = 0
+    for r in rows:
+        path = os.path.join(_photo_dir(), r["file"])
+        if os.path.exists(path):
+            os.remove(path)
+        db.execute(f"UPDATE {r['table']} SET {r['col']}=NULL WHERE id=?", (r["id"],))
+        removed += 1
+    db.audit(g.user, "delete", "photos", None, f"Deleted {removed} photos for week of {start} (saved offline)")
+    flash(f"{removed} photos for {start:%d %b} to {start + timedelta(days=6):%d %b %Y} deleted. "
+          "The job records are kept.", "success")
+    return redirect(url_for("farmapp.photos"))
