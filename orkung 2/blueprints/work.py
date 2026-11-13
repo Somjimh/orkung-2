@@ -83,6 +83,7 @@ def day():
     dd = date.fromisoformat(d)
     rec = _day_records(d)
     return render_template("work_day.html", d=d, rec=rec, jobs_by=_jobs_by_worker(rec["jobs"]),
+                           tasks_by=_tasks_by_worker(rec["tasks"]),
                            outputs=_output_totals(rec["jobs"]), day_name=dd.strftime("%A %d %B %Y"),
                            prev=(dd - timedelta(days=1)).isoformat(), next=(dd + timedelta(days=1)).isoformat(),
                            is_today=d == date.today().isoformat(), future=d > date.today().isoformat(),
@@ -104,6 +105,13 @@ def _jobs_by_worker(jobs):
     out = {}
     for j in jobs:
         out.setdefault(j["worker_id"], []).append(j)
+    return out
+
+
+def _tasks_by_worker(tasks):
+    out = {}
+    for t in tasks:
+        out.setdefault(t["worker_id"], []).append(t)
     return out
 
 
@@ -136,6 +144,7 @@ def day_report():
     dd = date.fromisoformat(d)
     return render_template("work_day_report.html", d=d, day_name=dd.strftime("%A %d %B %Y"), rec=rec, staff=staff,
                            att=att, counts=counts, jobs_by=_jobs_by_worker(rec["jobs"]),
+                           tasks_by=_tasks_by_worker(rec["tasks"]),
                            outputs=_output_totals(rec["jobs"]), att_label=farm.ATT_LABEL,
                            printed_by=g.user["full_name"], printed_at=_now_nairobi())
 

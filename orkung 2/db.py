@@ -65,6 +65,8 @@ def init_db(app):
     _add_columns(conn, "asset_events", [("meter_hours", "REAL")])
     _add_columns(conn, "assets", [("service_hours", "REAL")])
     _add_columns(conn, "stock_items", [("bee_harmful", "INTEGER")])
+    # Before and after photos (Nov 2026)
+    _add_columns(conn, "job_tasks", [("photo_before", "TEXT"), ("before_at", "TEXT")])
     conn.commit()
     conn.close()
     return fresh

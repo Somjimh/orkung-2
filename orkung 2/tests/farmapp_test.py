@@ -172,10 +172,50 @@ r = prince.post(f"/farm/jobs/{la['id']}/done", data={"d": T}, follow_redirects=T
 check("lucerne without a weight is refused", q("SELECT status FROM job_tasks WHERE id=?", (la["id"],))[0]["status"] == "open")
 r = prince.post(f"/farm/jobs/{la['id']}/done", data={"d": T, "qty": "410"}, follow_redirects=True)
 check("lucerne without a photo is refused", q("SELECT status FROM job_tasks WHERE id=?", (la["id"],))[0]["status"] == "open")
+# fodder needs a before photo first, then the after photo
+r = prince.post(f"/farm/jobs/{la['id']}/done", data={"d": T, "qty": "410", "photo": photo()},
+                content_type="multipart/form-data", follow_redirects=True)
+check("fodder job cannot be finished without a before photo",
+      q("SELECT status FROM job_tasks WHERE id=?", (la["id"],))[0]["status"] == "open")
+check("jobs screen asks for the before photo", "Picha ya kabla" in text(prince.get("/farm/jobs")))
+prince.post(f"/farm/jobs/{la['id']}/start", data={"d": T}, follow_redirects=True)
+check("start without a photo is refused", not q("SELECT photo_before FROM job_tasks WHERE id=?", (la["id"],))[0]["photo_before"])
+prince.post(f"/farm/jobs/{la['id']}/start", data={"d": T, "photo_before": photo()},
+            content_type="multipart/form-data", follow_redirects=True)
+row = q("SELECT * FROM job_tasks WHERE id=?", (la["id"],))[0]
+check("before photo saved with the time", row["photo_before"] and row["before_at"] and row["status"] == "open")
+check("jobs screen now asks for the after photo", "Picha ya baada" in text(prince.get("/farm/jobs")))
 r = prince.post(f"/farm/jobs/{la['id']}/done", data={"d": T, "qty": "410", "photo": photo()},
                 content_type="multipart/form-data", follow_redirects=True)
 row = q("SELECT * FROM job_tasks WHERE id=?", (la["id"],))[0]
 check("lucerne done with weight and photo", row["status"] == "done" and row["qty"] == 410 and row["photo"])
+check("done card shows before and after photos", row["photo_before"] in text(prince.get("/farm/jobs"))
+      and row["photo"] in text(prince.get("/farm/jobs")))
+# a big phone photo is shrunk
+from PIL import Image as _Img
+_big = io.BytesIO(); _Img.new("RGB", (4000, 3000), (40, 120, 40)).save(_big, "JPEG", quality=95); _big.seek(0)
+lb0 = q("SELECT * FROM job_tasks WHERE worker_id=? AND task_date=? AND title_en='Cut and weigh Lucerne B'", (W["Prince"]["id"], T))[0]
+prince.post(f"/farm/jobs/{lb0['id']}/start", data={"d": T, "photo_before": (_big, "IMG_0001.JPG")},
+            content_type="multipart/form-data")
+_saved = q("SELECT photo_before FROM job_tasks WHERE id=?", (lb0["id"],))[0]["photo_before"]
+with _Img.open(os.path.join(tmpdir, "farm-photos", _saved)) as _im:
+    check("4000 px phone photo stored as a 1280 px JPEG", max(_im.size) == 1280 and _saved.endswith(".jpg"), _im.size)
+# an extra job in a before/after area needs both photos
+prince.post("/farm/jobs/add", data={"d": T, "title": "Weed the banana basins", "area": "bananas"})
+check("extra banana job without photos is refused", not q("SELECT 1 FROM job_tasks WHERE title_en='Weed the banana basins'"))
+prince.post("/farm/jobs/add", data={"d": T, "title": "Weed the banana basins", "area": "bananas",
+                                    "photo_before": photo(), "photo": photo()}, content_type="multipart/form-data")
+check("extra banana job with both photos is saved",
+      bool(q("SELECT 1 FROM job_tasks WHERE title_en='Weed the banana basins' AND photo_before IS NOT NULL AND photo IS NOT NULL")))
+# staff-app jobs and photos reach the Daily Sheet and the printed day report
+ds = text(manager.get(f"/work/day?d={T}"))
+check("Daily Sheet lists jobs ticked on the phone", "Weed the banana basins" in ds and "Cut and weigh Lucerne A" in ds)
+check("Daily Sheet shows before and after photos", "Before and after photos" in ds and row["photo_before"] in ds)
+rp = text(manager.get(f"/work/day/report?d={T}"))
+check("printed day report lists phone jobs and photos", "Weed the banana basins" in rp and "Before and after photos" in rp
+      and row["photo"] in rp)
+check("started-but-unfinished job is flagged", "started" in ds and "Cut and weigh Lucerne B" in ds)
+
 check("photo saved beside the database and served", os.path.exists(os.path.join(tmpdir, "farm-photos", row["photo"]))
       and prince.get(f"/farm/photo/{row['photo']}").status_code == 200)
 check("photos need a login", app.test_client().get(f"/farm/photo/{row['photo']}").status_code in (302, 401))
@@ -297,6 +337,29 @@ check("foreign keys intact", not q("PRAGMA foreign_key_check"))
 
 if "--keep" in sys.argv:
     print("TEST DB:", dbpath)
+
+# weekly photos page: download as zip, then delete (records kept)
+import zipfile as _zf
+from datetime import date as _date, timedelta as _td
+_wk = (_date.fromisoformat(T) - _td(days=_date.fromisoformat(T).weekday())).isoformat()
+pg = text(admin.get("/farm/photos"))
+check("photos page lists this week's photos", "Download" in pg and _wk in pg)
+check("only admin opens the photos page", manager.get("/farm/photos").status_code in (302, 403)
+      and prince.get("/farm/photos").status_code in (302, 403))
+zr = admin.get(f"/farm/photos/{_wk}.zip")
+_names = _zf.ZipFile(io.BytesIO(zr.data)).namelist() if zr.status_code == 200 else []
+check("zip holds the week's photos, named by date, person, job, before/after",
+      any("Prince" in n and "Lucerne-A" in n and "1-before" in n for n in _names)
+      and any("Lucerne-A" in n and "2-after" in n for n in _names), _names[:4])
+admin.post(f"/farm/photos/{_wk}/delete", data={})
+check("delete needs the 'I have saved them' tick", q("SELECT photo FROM job_tasks WHERE id=?", (la["id"],))[0]["photo"])
+_file = q("SELECT photo FROM job_tasks WHERE id=?", (la["id"],))[0]["photo"]
+admin.post(f"/farm/photos/{_wk}/delete", data={"saved": "1"})
+_after = q("SELECT * FROM job_tasks WHERE id=?", (la["id"],))[0]
+check("photos deleted from disk and records, job kept", not _after["photo"] and not _after["photo_before"]
+      and _after["status"] == "done" and _after["qty"] == 410 and not os.path.exists(os.path.join(tmpdir, "farm-photos", _file)))
+check("Daily Sheet still opens after photos are cleared", manager.get(f"/work/day?d={T}").status_code == 200)
+
 print()
 if FAILS:
     print(f"{len(FAILS)} CHECK(S) FAILED:")

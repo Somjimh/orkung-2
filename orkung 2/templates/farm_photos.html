@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Photos - {{ app_name }}{% endblock %}
+{% block heading %}Job photos{% endblock %}
+{% block content %}
+<div class="card section">
+  <h3 style="margin-top:0;">Save, then clear, each week</h3>
+  <ol style="margin:.3rem 0 .6rem;padding-left:1.2rem;">
+    <li>Click <strong>Download</strong> for a week. A zip file with that week's photos goes to your laptop. Each photo is named by date, person and job, with "1-before" and "2-after".</li>
+    <li>Open the zip on your laptop to check the photos are there.</li>
+    <li>Tick <strong>I have saved them</strong> and click <strong>Delete</strong>. The photos are removed from the website. The jobs, weights and notes stay on the reports.</li>
+  </ol>
+  <p class="small muted" style="margin:0;">Now stored: {{ total }} photo{{ '' if total == 1 else 's' }}, {{ '%.1f'|format(total_mb) }} MB. Includes before/after job photos and spray label photos.</p>
+</div>
+
+<div class="card section">
+  {% if weeks %}
+  <div class="table-wrap"><table class="data">
+    <thead><tr><th>Week</th><th>Photos</th><th>Size</th><th>Download</th><th>Delete from website</th></tr></thead>
+    <tbody>
+    {% for w in weeks %}
+    <tr>
+      <td data-label="Week"><strong>{{ w.start.strftime('%a %d %b') }} – {{ w.end.strftime('%a %d %b %Y') }}</strong>{% if w.current %} <span class="pill amber">this week</span>{% endif %}</td>
+      <td data-label="Photos">{{ w.count }}</td>
+      <td data-label="Size">{{ '%.1f'|format(w.mb) }} MB</td>
+      <td data-label="Download"><a class="btn small" href="{{ url_for('farmapp.photos_zip', wk=w.start.isoformat()) }}">&#11015; Download</a></td>
+      <td data-label="Delete from website">
+        <form method="post" action="{{ url_for('farmapp.photos_delete', wk=w.start.isoformat()) }}" class="btn-row" style="flex-wrap:nowrap;align-items:center;"
+              onsubmit="return confirm('Delete {{ w.count }} photos for this week from the website? Make sure they are saved on your laptop.');">
+          <label class="small" style="display:flex;gap:.3rem;align-items:center;white-space:nowrap;"><input type="checkbox" name="saved" value="1" required> I have saved them</label>
+          <button class="btn small danger" type="submit">Delete</button>
+        </form>
+        {% if w.current %}<div class="small muted">Staff are still adding photos this week; better to clear it next week.</div>{% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}
+  <p class="muted" style="margin:0;">No photos stored at the moment.</p>
+  {% endif %}
+</div>
+{% endblock %}

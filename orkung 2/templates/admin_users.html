@@ -16,6 +16,11 @@
   <a class="btn" href="{{ url_for('admin.staff_logins') }}">Create staff logins &rarr;</a>
 </div>
 
+<div class="card section" style="display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;">
+  <div><h3 style="margin:0;">Job photos</h3><p class="small muted" style="margin:.2rem 0 0;">Download each week's before/after photos to your laptop, then clear them from the website.</p></div>
+  <a class="btn secondary" href="{{ url_for('farmapp.photos') }}">Photos &rarr;</a>
+</div>
+
 <div class="card section">
   <h3>Add a user</h3>
   <form method="post" action="{{ url_for('admin.add_user') }}" class="form-grid">
