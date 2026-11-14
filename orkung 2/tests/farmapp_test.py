@@ -360,6 +360,11 @@ check("photos deleted from disk and records, job kept", not _after["photo"] and 
       and _after["status"] == "done" and _after["qty"] == 410 and not os.path.exists(os.path.join(tmpdir, "farm-photos", _file)))
 check("Daily Sheet still opens after photos are cleared", manager.get(f"/work/day?d={T}").status_code == 200)
 
+# log out button (a form that posts) works and ends the session
+r = prince.post("/logout")
+check("log out button works", r.status_code == 302 and "/login" in r.headers.get("Location", ""))
+check("after log out the jobs page asks to log in again", prince.get("/farm/jobs").status_code == 302)
+
 print()
 if FAILS:
     print(f"{len(FAILS)} CHECK(S) FAILED:")

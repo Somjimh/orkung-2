@@ -28,7 +28,7 @@ def login():
     return render_template("login.html", error=error)
 
 
-@bp.route("/logout")
+@bp.route("/logout", methods=["GET", "POST"])
 def logout():
     if g.user:
         db.audit(g.user, "logout", "user", g.user["id"], f"{g.user['username']} logged out")
